@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+langchain
+langchain-community
+langchain-huggingface
+langchain-ollama
+chromadb
+sentence-transformers
+unstructured
+networkx
