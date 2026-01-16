@@ -1,1 +1,12 @@
 chroma_db/
+
+# Virtual Environments
+venv/
+.env
+
+# Python
+__pycache__/
+*._pyc
+
+# OS
+.DS_Store

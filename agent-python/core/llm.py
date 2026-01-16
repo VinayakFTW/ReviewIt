@@ -53,7 +53,7 @@ You must strictly follow this Markdown structure for your response:
 
 def agent_loop():
     req = input("Enter a search query about your codebase: ")
-    for iter in range(10):
+    for iter in range(1):
 
         #1. THINK
         messages = [
@@ -62,10 +62,15 @@ def agent_loop():
         response = model.invoke(messages)
         print(response.content)
 
+        context_snippets = querydb(req)
+        context = "\n\n".join(context_snippets)
 
-        #2. REASON
+        #2. REASON with context
         messages = [
-            ("system", response.content + querydb(req)),
+            ("system", system_prompt),
+            ("human",req),
+            ("assistant",response.content)
+            ("human",context),
             ]
         response = model.invoke(messages)
         print(response.content)
