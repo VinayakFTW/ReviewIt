@@ -1,75 +1,138 @@
+import re
 from langchain_ollama import ChatOllama
 from memory import querydb
 
-
 model = ChatOllama(model="qwen2.5-coder:14b")
 
-system_prompt = """
-You are an expert Senior Software Architect and Technical Writer acting as an automated Codebase Agent. Your goal is to analyze source code files to ensure production safety and generate comprehensive documentation.
+SEARCH_QUERY_PROMPT = """
+You are an intelligent code retrieval assistant. 
+Your task is to convert the user's natural language request into a specific, concise search query optimized for a vector database containing source code.
+Do not answer the question. Just output the search query string.
 
-### INSTRUCTIONS
-You will receive one or more code files. You must perform two distinct tasks for every analysis:
+Example:
+User: "How does the login system work?"
+Output: login authentication logic class function
 
-#### TASK 1: CODE REVIEW (Production Safety)
-Analyze the code for:
-1. **Bugs & Logic Errors:** Identify syntax errors, race conditions, or logical fallacies.
-2. **Security Vulnerabilities:** Check for injection risks, exposed secrets, or improper data handling.
-3. **Performance Optimization:** Highlight inefficient algorithms or memory leaks.
-4. **Maintainability:** Evaluate adherence to DRY (Don't Repeat Yourself) and SOLID principles.
+User: "Fix the bug in the memory manager"
+Output: MemoryManager class error exception handling
 
-#### TASK 2: DOCUMENTATION GENERATION
-Generate professional documentation in Markdown format including:
-1. **Module Overview:** A high-level summary of what the code does.
-2. **Dependencies:** A list of libraries or external services required.
-3. **Function/Class Dictionary:** Document inputs, outputs, and behavior for key components.
-4. **Usage Example:** A short snippet showing how to use the code.
-
-### OUTPUT FORMAT
-You must strictly follow this Markdown structure for your response:
-
-# [Filename/Module Name] Analysis
-
-## 1. Code Review Report
-| Severity | Type | Description | Recommendation |
-| :--- | :--- | :--- | :--- |
-| [High/Med/Low] | [Bug/Security/Perf] | ... | ... |
-
-## 2. Documentation
-### Overview
-...
-### Architecture & Logic
-...
-### API Reference
-- `function_name(params)`: Description...
-
-## 3. Refactored Snippet (Optional)
-(Only provide if critical issues were found)
-
-### CONSTRAINT
-- Be concise but technical.
-- Do not hallucinate imports or functions that do not exist in the provided text.
-- If the code is perfect, state "No issues found" in the review section.
+User: "{user_input}"
+Output:
 """
 
+ANALYSIS_SYSTEM_PROMPT = """
+You are an expert Senior Software Architect. Your goal is to analyze source code to ensure production safety.
+
+### INSTRUCTIONS
+You will receive a user request and relevant code context. You must produce an output that allows the system to generate one specific file: `review.md`.
+
+### OUTPUT FORMAT
+You must strictly use the following XML-style tags to separate your content. Do not output anything outside these tags.
+
+<REVIEW>
+(Content for review.md)
+# Code Review Report
+## 1. Bugs & Logic Errors
+...
+## 2. Security Vulnerabilities
+...
+## 3. Performance & Maintainability
+...
+
+</REVIEW>
+
+
+### RULES
+1. **Always** generate the `<REVIEW>` section based on the provided code.
+2. Be technical and precise. Do not hallucinate code not present in the context.
+"""
+
+def extract_section(text, tag):
+    """Helper to extract content between XML-style tags."""
+    pattern = f"<{tag}>(.*?)</{tag}>"
+    match = re.search(pattern, text, re.DOTALL)
+    return match.group(1).strip() if match else None
+
+def save_to_file(filename, content):
+    """Helper to write content to a file."""
+    if content:
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"generated {filename}")
+    else:
+        print(f"Skipping {filename} (No content generated)")
+
 def agent_loop():
-    req = input("Enter a search query about your codebase: ")
-    for iter in range(10):
+    print("---------------------------------------------------------")
+    print("Code-Sentinel Initialized. (Type 'exit' or 'quit' to stop)")
+    print("---------------------------------------------------------")
 
-        #1. THINK
-        messages = [
-            ("system", system_prompt),
-            ("human",req),]
-        response = model.invoke(messages)
-        print(response.content)
+    while True:
+        try:
+            # 1. GET USER INPUT
+            user_input = input("\nExplain what you need: ")
+            
+            if user_input.lower() in ["exit", "quit"]:
+                print("Exiting...")
+                break
+                
+            if not user_input.strip():
+                continue
 
-
-        #2. REASON
-        messages = [
-            ("system", response.content + querydb(req)),
+            # 2. GENERATE SEARCH QUERY (Reasoning Step)
+            print("formulating search query...")
+            query_messages = [
+                ("human", SEARCH_QUERY_PROMPT.format(user_input=user_input))
             ]
-        response = model.invoke(messages)
-        print(response.content)
+            search_query = model.invoke(query_messages).content.strip()
+            print(f"Searching database for: '{search_query}'")
 
-agent_loop()
-        
-        
+            # 3. RETRIEVE CONTEXT
+            retrieved_snippets = querydb(search_query)
+            
+            if not retrieved_snippets:
+                print("No relevant code found. Trying to answer without context...")
+                formatted_context = "No specific code found in codebase memory."
+            else:
+                print(f"Found {len(retrieved_snippets)} relevant code snippets.")
+                formatted_context = "\n\n".join(retrieved_snippets)
+
+            # 4. GENERATE ANALYSIS (Review + Docs)
+            print("Analyzing code and generating reports...")
+            
+            final_user_message = f"""
+### USER REQUEST:
+{user_input}
+
+### RETRIEVED CODE CONTEXT:
+{formatted_context}
+"""
+            messages = [
+                ("system", ANALYSIS_SYSTEM_PROMPT),
+                ("human", final_user_message),
+            ]
+            
+            response = model.invoke(messages)
+            raw_output = response.content
+
+            # 5. PARSE AND SAVE FILES
+            review_content = extract_section(raw_output, "REVIEW")
+            docs_content = extract_section(raw_output, "DOCS")
+
+            if review_content:
+                save_to_file("review.md", review_content)
+            else:
+                print("Warning: No review content was generated by the model.")
+
+            if docs_content:
+                save_to_file("documentation.md", docs_content)
+            else:
+                print("No documentation requested/generated for this turn.")
+
+            print("\nDone! Check 'review.md' and (if applicable) 'documentation.md'.")
+
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+if __name__ == "__main__":
+    agent_loop()

@@ -25,7 +25,7 @@ def load_documents(source_dir: str) -> List:
     return documents
 
 def split_documents(documents: List) -> List:
-    #RecursiveCharacterTextSplitter tries to split by paragraphs, then lines, etc.
+    #RecursiveCharacterTextSplitter tries to split by paragraphs, then lines, etc. bade docs ke liye slow tho
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=2000,
         chunk_overlap=200,
@@ -35,7 +35,7 @@ def split_documents(documents: List) -> List:
     print(f"Split documents into {len(chunks)} chunks.")
     return chunks
 
-#loads and ingests the codebase to chromadb using jina with a 8192 token context window
+#loads and ingests the codebase to chromadb using jina with a 32,768 token context window
 def ingest_codebase(source_dir: str):
     documents = load_documents(source_dir)
     if not documents:
@@ -45,7 +45,7 @@ def ingest_codebase(source_dir: str):
     chunks = split_documents(documents)
 
     print("Creating Embeddings")
-    embedding_model = HuggingFaceEmbeddings(model_name="jinaai/jina-embeddings-v2-base-code",model_kwargs={'device': 'cpu','trust_remote_code': True})
+    embedding_model = HuggingFaceEmbeddings(model_name="jinaai/jina-code-embeddings-1.5b",model_kwargs={'device': 'cuda','trust_remote_code': True})
 
     vector_db = Chroma.from_documents(
         documents=chunks,
