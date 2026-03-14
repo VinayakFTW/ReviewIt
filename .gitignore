@@ -1,4 +1,10 @@
 chroma_db/
-agent-python/core/__pycache__
+__pycache__
 documentation.md
 review.md
+kaggle.json
+tmep
+run_pipe.ipynb
+dep_graph.graphml
+symbol_index.db
+.env

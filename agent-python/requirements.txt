@@ -4,7 +4,11 @@ langchain
 langchain-community
 langchain-huggingface
 langchain-ollama
+langchain-chroma
 chromadb
 sentence-transformers
 unstructured
 networkx
+optimum
+gitpython
+python-dotenv
