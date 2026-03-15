@@ -49,6 +49,8 @@ Synthesise both into a single, authoritative report. Deduplicate overlapping fin
 Group by severity: CRITICAL → HIGH → MEDIUM → LOW.
 Reference file and line numbers precisely. Be direct and technical.
 
+CRITICAL INSTRUCTION: You MUST wrap your code review inside <REVIEW> tags and your architecture overview inside <DOCS> tags. Do not omit these tags.
+
 <REVIEW>
 # Code Review Report
 
@@ -242,8 +244,30 @@ class ReviewPipeline:
     @staticmethod
     def _extract_tag(text: str, tag: str) -> str:
         import re
-        m = re.search(rf"<{tag}>(.*?)</{tag}>", text, re.DOTALL)
-        return m.group(1).strip() if m else ""
+        # Sometimes LLMs wrap the entire output in markdown code blocks like ```xml
+        clean_text = re.sub(r"^```[a-zA-Z]*\n", "", text.strip())
+        clean_text = re.sub(r"\n```$", "", clean_text)
+
+        m = re.search(rf"<{tag}>(.*?)</{tag}>", clean_text, re.DOTALL | re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+        
+        # FALLBACK: If the LLM forgot the tags, rescue the raw text
+        if tag == "REVIEW":
+            # If <DOCS> exists, take everything before it. Otherwise, take the whole text.
+            if "<DOCS>" in clean_text:
+                return clean_text.split("<DOCS>")[0].strip()
+            elif "DOCS" in clean_text: # Handle missing brackets
+                return clean_text.split("DOCS")[0].strip()
+            return clean_text.strip()
+            
+        elif tag == "DOCS":
+            if "</REVIEW>" in clean_text:
+                return clean_text.split("</REVIEW>")[-1].strip()
+            elif "<DOCS>" in clean_text:
+                return clean_text.split("<DOCS>")[-1].replace("</DOCS>", "").strip()
+                
+        return ""
 
     @staticmethod
     def _save(filename: str, content: str):

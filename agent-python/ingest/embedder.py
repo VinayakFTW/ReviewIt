@@ -19,6 +19,7 @@ functions rather than orphaned fragments.
 import os
 from pathlib import Path
 from typing import List
+import sys
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -29,10 +30,24 @@ from ingest.ast_parser import FileAnalysis
 
 load_dotenv()
 
+# ---------------------------------------------------------------------------
+# Offline Model Path Resolution
+# ---------------------------------------------------------------------------
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    bundle_dir = sys._MEIPASS
+else:
+    bundle_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+OFFLINE_MODEL_PATH = os.path.join(bundle_dir, "offline_model")
+
+if os.path.exists(OFFLINE_MODEL_PATH):
+    EMBEDDING_MODEL_NAME = OFFLINE_MODEL_PATH
+    print(f"[Embedder] Using local offline model: {EMBEDDING_MODEL_NAME}")
+else:
+    EMBEDDING_MODEL_NAME = "jinaai/jina-code-embeddings-1.5b"
+    print(f"[Embedder] Local model not found, falling back to HuggingFace: {EMBEDDING_MODEL_NAME}")
+
 PERSIST_DIRECTORY = os.environ.get("PERSIST_DIRECTORY", "chroma_db")
-EMBEDDING_MODEL_NAME = os.environ.get(
-    "EMBEDDING_MODEL_NAME", "jinaai/jina-embeddings-v2-base-code"
-)
 COLLECTION_NAME = "codebase_symbols"
 
 

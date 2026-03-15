@@ -1,10 +1,11 @@
 chroma_db/
 __pycache__
-documentation.md
 review.md
+temp
+build
+dist
+CodeSentinel.Spec
 kaggle.json
-tmep
-run_pipe.ipynb
 dep_graph.graphml
 symbol_index.db
 kaggle.yml
@@ -12,4 +13,6 @@ api_keys.txt
 notebook.ipynb
 kernel-metadata.json
 agent-python.rar
+out
+offline_model
 .env

@@ -88,7 +88,8 @@ def main():
         print("=======================================")
 
         try:
-            choice = input("Choice: ").strip().lower()
+            #choice = input("Choice: ").strip().lower()
+            choice = "2"
         except (KeyboardInterrupt, EOFError):
             print("\nExiting.")
             break
@@ -98,7 +99,8 @@ def main():
         elif choice == "1":
             qa_pipeline.interactive_loop()
         elif choice == "2":
-            scope = input("Scope (Enter = full audit): ").strip() or "Full codebase audit"
+            #scope = input("Scope (Enter = full audit): ").strip() or "Full codebase audit"
+            scope = "full codebase audit"
             review_pipeline.run(user_request=scope)
         elif choice == "3":
             mode = input("Full [f] or incremental [i]? ").strip().lower()
@@ -117,7 +119,6 @@ def main():
             docs_pipeline.retriever = retriever
         else:
             print("Invalid choice.")
-        break
 
 if __name__ == "__main__":
     main()
