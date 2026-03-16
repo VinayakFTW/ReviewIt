@@ -107,7 +107,9 @@ class ReviewPipeline:
         symbol_index: SymbolIndex,
         source_dir: str,
         max_workers: int = 10,
+        output_dir: str | None = None
     ):
+        self.output_dir = output_dir or source_dir
         self.retriever = retriever
         self.symbol_index = symbol_index
         self.source_dir = source_dir
@@ -270,8 +272,10 @@ class ReviewPipeline:
         return ""
 
     @staticmethod
-    def _save(filename: str, content: str):
+    def _save(self, filename: str, content: str):
         if content:
-            with open(filename, "w", encoding="utf-8") as f:
+            path = os.path.join(self.output_dir, filename)
+            os.makedirs(self.output_dir, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
-            print(f"  Saved → {filename}")
+            print(f"  Saved → {path}")

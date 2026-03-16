@@ -1,9 +1,11 @@
 import os
 import sys
+from core.paths import get_app_dir, get_env_path
 from setup import *
-from dotenv import load_dotenv,set_key
+from dotenv import load_dotenv
 
-load_dotenv()
+env_path = get_env_path()
+load_dotenv(dotenv_path=env_path)
 
 
 def main():
@@ -18,8 +20,8 @@ def main():
         sys.exit(1)
     print("[OK] Ollama is running.\n")
     
-    app_dir = os.path.dirname(os.path.abspath(__file__))
-    env_path = os.path.join(app_dir, ".env")
+    app_dir = get_app_dir()
+    env_path = get_env_path()
     
     # Load existing .env if present
     load_dotenv(dotenv_path=env_path)
@@ -54,21 +56,21 @@ def main():
         )
 
         if not is_configured:
-            print("Setting up environment variables in .env...")
+            print("Setting up environment...")
             if not os.path.exists(env_path):
-                open(env_path, 'a').close() # Create if it doesn't exist
-                
-            set_key(env_path, "SOURCE_DIR", repo_path)
-            set_key(env_path, "PERSIST_DIRECTORY", os.path.join(app_dir, "chroma_db"))
-            set_key(env_path, "SYMBOL_DB_PATH", os.path.join(app_dir, "symbol_index.db"))
-            set_key(env_path, "DEP_GRAPH_PATH", os.path.join(app_dir, "dep_graph.graphml"))
-            set_key(env_path, "DOCS_DIR", os.path.join(repo_path, "docs"))
-            
-            # Reload the updated .env
+                open(env_path, 'a').close()
+
+            bootstrap_dependencies()
+            setup_environment(repo_path)      # sets all os.environ keys cleanly
+
+            # Write back to .env for persistence across restarts
+            from dotenv import set_key
+            for key in ["SOURCE_DIR", "DATA_DIR", "PERSIST_DIRECTORY",
+                        "SYMBOL_DB_PATH", "DEP_GRAPH_PATH", "DOCS_DIR"]:
+                set_key(env_path, key, os.environ[key])
+
             load_dotenv(dotenv_path=env_path, override=True)
             
-            print("Bootstrapping dependencies...")
-            bootstrap_dependencies()
         else:
             print("Environment and dependencies are already set up for this repository.")
 

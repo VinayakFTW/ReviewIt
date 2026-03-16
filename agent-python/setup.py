@@ -133,16 +133,20 @@ def bootstrap_dependencies():
             
     pull_models()
 
-def setup_environment(source_dir):
+def setup_environment(source_dir: str):
     """
-    Sets up environment variables so main.py and the ingestors 
-    store their databases in a hidden folder inside the target repo.
+    Sets all path env vars. Must use get_app_dir(), NOT __file__.
+    __file__ in a frozen exe = _internal/setup.pyc — wrong and read-only.
     """
-    db_dir = os.path.join(source_dir, ".codesentinel_db")
-    os.makedirs(db_dir, exist_ok=True)
-    os.environ["SOURCE_DIR"] = source_dir
-    os.environ["PERSIST_DIRECTORY"] = os.path.join(db_dir, "chroma_db")
-    os.environ["SYMBOL_DB_PATH"] = os.path.join(db_dir, "symbol_index.db")
-    os.environ["DEP_GRAPH_PATH"] = os.path.join(db_dir, "dep_graph.graphml")
-    os.environ["DOCS_DIR"] = os.path.join(source_dir, "docs")
+    from core.paths import get_app_dir  # safe — paths.py uses sys.executable
+    app_dir = get_app_dir()
+    data_dir = os.path.join(app_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+
+    os.environ["SOURCE_DIR"]        = source_dir
+    os.environ["DATA_DIR"]          = data_dir
+    os.environ["PERSIST_DIRECTORY"] = os.path.join(data_dir, "chroma_db")
+    os.environ["SYMBOL_DB_PATH"]    = os.path.join(data_dir, "symbol_index.db")
+    os.environ["DEP_GRAPH_PATH"]    = os.path.join(data_dir, "dep_graph.graphml")
+    os.environ["DOCS_DIR"]          = os.path.join(source_dir, "docs")
 

@@ -1,14 +1,9 @@
-import os
-import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
 import time
-import gc
 from langchain_ollama import ChatOllama
-from torch.cuda import empty_cache
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from memory import MemoryManager
+from retrieval.hybrid_retriever import HybridRetriever
 from core.model_manager import (
     ORCHESTRATOR_MODEL,
     unload_workers,
@@ -86,7 +81,8 @@ class OrchestratorAgent:
       6. Saves review.md and documentation.md.
     """
 
-    def __init__(self, max_workers: int = 1):
+    def __init__(self, retriever: HybridRetriever, max_workers: int = 1):
+        self.retriever = retriever
         self.max_workers = max_workers
         self.llm = ChatOllama(
             model=ORCHESTRATOR_MODEL,
@@ -94,14 +90,19 @@ class OrchestratorAgent:
             keep_alive="10m",
         )
 
-    def run(self, user_request: str, memory: MemoryManager):
+    def run(self, user_request: str):
         print("\n[Orchestrator] Planning review depth...")
         depth = self._plan_depth(user_request)
         rounds, k = self._depth_to_params(depth)
         print(f"[Orchestrator] Depth={depth} → {rounds} round(s), k={k} per search.")
         unload_model(ORCHESTRATOR_MODEL)
-        gc.collect()
-        empty_cache()
+        try:
+            import gc
+            from torch.cuda import empty_cache
+            gc.collect()
+            empty_cache()
+        except Exception:
+            pass
         time.sleep(5)
         # ------------------------------------------------------------------
         # Phase 1: Parallel worker execution
@@ -112,7 +113,7 @@ class OrchestratorAgent:
         with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
             futures = {
                 pool.submit(
-                    self._run_worker, spec, memory, user_request, k, rounds
+                    self._run_worker, spec, self.retriever, user_request, k, rounds
                 ): spec
                 for spec in SPECIALIZATIONS
             }
@@ -157,7 +158,7 @@ class OrchestratorAgent:
     @staticmethod
     def _run_worker(
         specialization: str,
-        memory: MemoryManager,
+        retriever: HybridRetriever,
         user_request: str,
         k: int,
         rounds: int,
@@ -165,7 +166,7 @@ class OrchestratorAgent:
         """Thread target — creates and runs a single WorkerAgent."""
         worker = WorkerAgent(
             specialization=specialization,
-            memory=memory,
+            retriever=retriever,
             chunks_per_search=k,
             max_rounds=rounds,
         )

@@ -20,21 +20,16 @@ import os
 import shutil
 import sys
 
-# Project root on path
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
 from ingest.ast_parser import parse_directory
 from ingest.symbol_index import SymbolIndex
 from ingest.dep_graph import DependencyGraph
 from ingest.embedder import build_vector_store
-
-
-GRAPH_PATH = os.environ.get("DEP_GRAPH_PATH", "dep_graph.graphml")
-SYMBOL_DB  = os.environ.get("SYMBOL_DB_PATH",  "symbol_index.db")
-VECTOR_DIR = os.environ.get("PERSIST_DIRECTORY", "chroma_db")
-
+from core.paths import get_dep_graph, get_symbol_db, get_persist_dir
 
 def run_ingest(source_dir: str, clean: bool = True) -> None:
+    GRAPH_PATH = get_dep_graph()
+    SYMBOL_DB  = get_symbol_db()
+    VECTOR_DIR = get_persist_dir()
     print(f"\n{'='*55}")
     print(f" Code-Sentinel Indexer — source: {source_dir}")
     print(f"{'='*55}\n")
@@ -85,7 +80,7 @@ def run_ingest(source_dir: str, clean: bool = True) -> None:
 
     # Step 4 — Embed symbols
     print("\n[4/4] Embedding symbols into ChromaDB...")
-    build_vector_store(analyses, persist_dir=VECTOR_DIR)
+    build_vector_store(analyses, persist_directory=VECTOR_DIR)
 
     print(f"\n{'='*55}")
     print(" Indexing complete. Summary:")

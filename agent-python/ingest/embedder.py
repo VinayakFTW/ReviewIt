@@ -16,10 +16,7 @@ Each chunk is a semantically complete unit. Retrieval therefore returns whole
 functions rather than orphaned fragments.
 """
 
-import os
-from pathlib import Path
 from typing import List
-import sys
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -28,45 +25,9 @@ from dotenv import load_dotenv
 
 from ingest.ast_parser import FileAnalysis
 
-load_dotenv()
+from core.paths import get_embedding_model, get_persist_dir,get_env_path
 
-# ---------------------------------------------------------------------------
-# Offline Model Path Resolution
-# ---------------------------------------------------------------------------
-if getattr(sys, 'frozen', False):
-    # The directory where the .exe is located (e.g., dist/)
-    exe_dir = os.path.dirname(sys.executable)
-    
-    # 1. PyInstaller 5.3+ puts bundled data in the _internal folder
-    internal_path = os.path.join(exe_dir, "_internal", "offline_model")
-    
-    # 2. Older PyInstaller versions or manual placement next to the .exe
-    primary_path = os.path.join(exe_dir, "offline_model")
-    
-    # 3. Fallback for testing from within the dist folder before moving
-    fallback_path = os.path.join(os.path.dirname(exe_dir), "offline_model")
-    
-    if os.path.exists(internal_path):
-        OFFLINE_MODEL_PATH = internal_path
-    elif os.path.exists(primary_path):
-        OFFLINE_MODEL_PATH = primary_path
-    elif os.path.exists(fallback_path):
-        OFFLINE_MODEL_PATH = fallback_path
-    else:
-        OFFLINE_MODEL_PATH = internal_path # Default fallback
-else:
-    # Running as a normal Python script
-    bundle_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    OFFLINE_MODEL_PATH = os.path.join(bundle_dir, "offline_model")
-
-if os.path.exists(OFFLINE_MODEL_PATH):
-    EMBEDDING_MODEL_NAME = OFFLINE_MODEL_PATH
-    print(f"[Embedder] Using local offline model: {EMBEDDING_MODEL_NAME}")
-else:
-    EMBEDDING_MODEL_NAME = "jinaai/jina-code-embeddings-1.5b"
-    print(f"[Embedder] Local model not found, falling back to HuggingFace: {EMBEDDING_MODEL_NAME}")
-
-PERSIST_DIRECTORY = os.environ.get("PERSIST_DIRECTORY", "chroma_db")
+load_dotenv(dotenv_path=get_env_path())
 COLLECTION_NAME = "codebase_symbols"
 
 
@@ -134,10 +95,17 @@ def _make_documents(analyses: List[FileAnalysis]) -> List[Document]:
 
     return docs
 
+def _get_embedding_fn():
+    model_name = get_embedding_model()
+    print(f"[Embedder] Using model: {model_name}")
+    return HuggingFaceEmbeddings(
+        model_name=model_name,
+        model_kwargs={"device": "cuda", "trust_remote_code": True},
+    )
 
 def build_vector_store(
-    analyses: List[FileAnalysis],
-    persist_dir: str = PERSIST_DIRECTORY,
+    analyses: List[FileAnalysis]
+    , persist_directory: str = None
 ) -> Chroma:
     """
     Build (or rebuild) the ChromaDB vector store from parsed FileAnalysis objects.
@@ -146,10 +114,7 @@ def build_vector_store(
     docs = _make_documents(analyses)
     print(f"[Embedder] Embedding {len(docs)} symbol documents...")
 
-    embedding_fn = HuggingFaceEmbeddings(
-        model_name=EMBEDDING_MODEL_NAME,
-        model_kwargs={"device": "cuda", "trust_remote_code": True},
-    )
+    embedding_fn = _get_embedding_fn()
 
     # Batch to avoid OOM on large repos
     BATCH = 1
@@ -160,25 +125,21 @@ def build_vector_store(
             db = Chroma.from_documents(
                 documents=batch,
                 embedding=embedding_fn,
-                persist_directory=persist_dir,
+                persist_directory=persist_directory or get_persist_dir(),
                 collection_name=COLLECTION_NAME,
             )
         else:
             db.add_documents(batch)
         print(f"  [Embedder] {min(i + BATCH, len(docs))}/{len(docs)} embedded...")
 
-    print(f"[Embedder] Vector store saved to '{persist_dir}'.")
+    print(f"[Embedder] Vector store saved to '{persist_directory or get_persist_dir()}'.")
     return db
 
 
-def load_vector_store(persist_dir: str = PERSIST_DIRECTORY) -> Chroma:
+def load_vector_store(persist_directory: str = get_persist_dir()) -> Chroma:
     """Load an existing vector store (no re-embedding)."""
-    embedding_fn = HuggingFaceEmbeddings(
-        model_name=EMBEDDING_MODEL_NAME,
-        model_kwargs={"device": "cuda", "trust_remote_code": True},
-    )
     return Chroma(
-        persist_directory=persist_dir,
-        embedding_function=embedding_fn,
+        persist_directory=persist_directory or get_persist_dir(),
+        embedding_function=_get_embedding_fn(),
         collection_name=COLLECTION_NAME,
     )

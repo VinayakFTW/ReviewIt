@@ -5,14 +5,11 @@ WorkerAgent now uses the HybridRetriever rather than the raw MemoryManager.
 This gives it dep-graph-expanded context instead of pure similarity hits.
 """
 
-import os
-import sys
 from dataclasses import dataclass
 from typing import List, Optional
 
 from langchain_ollama import ChatOllama
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from core.model_manager import WORKER_MODEL
 
 SPECIALIZATIONS = [

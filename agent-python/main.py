@@ -4,8 +4,6 @@ main.py — Code-Sentinel entry point.
 
 import os
 import sys
-from dotenv import load_dotenv
-load_dotenv()
 
 from core.model_manager import check_ollama_running, warmup_model, ORCHESTRATOR_MODEL
 from ingest.dep_graph import DependencyGraph
@@ -15,12 +13,13 @@ from retrieval.hybrid_retriever import HybridRetriever
 from pipelines.qa import QAPipeline
 from pipelines.review import ReviewPipeline
 from pipelines.docs import DocsPipeline
+from dotenv import load_dotenv
 
-SOURCE_DIR  = os.environ.get("SOURCE_DIR")
-GRAPH_PATH  = os.environ.get("DEP_GRAPH_PATH")
-SYMBOL_DB   = os.environ.get("SYMBOL_DB_PATH")
-VECTOR_DIR  = os.environ.get("PERSIST_DIRECTORY")
-DOCS_DIR    = os.environ.get("DOCS_DIR")
+from core.paths import (
+    get_source_dir, get_persist_dir, get_symbol_db,
+    get_dep_graph, get_docs_dir,get_env_path
+)
+load_dotenv(dotenv_path=get_env_path())
 
 BANNER = """
 ========================================================
@@ -31,6 +30,9 @@ BANNER = """
 
 
 def load_shared_resources():
+    VECTOR_DIR = get_persist_dir()
+    GRAPH_PATH = get_dep_graph()
+    SYMBOL_DB  = get_symbol_db()
     print("[Init] Loading vector store...")
     vector_store = load_vector_store(VECTOR_DIR)
 
@@ -58,6 +60,13 @@ def load_shared_resources():
 
 
 def main():
+
+    SOURCE_DIR = get_source_dir()
+    VECTOR_DIR = get_persist_dir()
+    GRAPH_PATH = get_dep_graph()
+    SYMBOL_DB  = get_symbol_db()
+    DOCS_DIR   = get_docs_dir(SOURCE_DIR)
+
     print(BANNER)
 
     if not check_ollama_running():

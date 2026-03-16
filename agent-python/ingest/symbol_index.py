@@ -12,8 +12,6 @@ Stores every function and class extracted by the AST parser and supports:
 This lets the hybrid retriever quickly go from "symbol name" → "source code"
 without re-reading files from disk on every query.
 """
-
-import os
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -22,7 +20,7 @@ from typing import Iterator, List, Optional
 from ingest.ast_parser import FileAnalysis, FunctionSymbol, ClassSymbol
 
 
-DB_PATH_DEFAULT = os.environ.get("SYMBOL_DB_PATH", "symbol_index.db")
+from core.paths import get_symbol_db
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS functions (
@@ -78,8 +76,8 @@ class SymbolIndex:
     SQLite-backed symbol store. Instantiate once; pass it to the retriever.
     """
 
-    def __init__(self, db_path: str = DB_PATH_DEFAULT):
-        self.db_path = db_path
+    def __init__(self, db_path: str | None = None):
+        self.db_path = db_path or get_symbol_db()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
