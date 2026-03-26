@@ -23,7 +23,7 @@ load_dotenv(dotenv_path=get_env_path())
 
 BANNER = """
 ========================================================
-|              Code-Sentinel  v2  (Hybrid)             |
+|              Code-Sentinel  v1  (Hybrid)             |
 |  AST + DepGraph + SymbolIndex + Vector + 10 Workers  |
 ========================================================
 """

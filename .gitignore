@@ -1,9 +1,10 @@
 __pycache__
 review.md
-temp
+kaggle_temp
 build
 dist
 CodeSentinel.Spec
 offline_model
 data
+online.py
 .env

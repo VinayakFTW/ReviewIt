@@ -406,7 +406,7 @@ def parse_directory(source_dir: str, glob: str = "**/*.py") -> List[FileAnalysis
     for fp in files:
         # Skip venv / site-packages
         parts = fp.parts
-        if any(p in (".venv", "venv", "__pycache__", "site-packages") for p in parts):
+        if any(p in (".venv", "venv", "__pycache__", "site-packages","dist","build") for p in parts):
             continue
         analysis = parse_file(str(fp))
         results.append(analysis)

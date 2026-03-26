@@ -18,10 +18,11 @@ Phase 2 — Semantic analysis (10 workers, parallel)
 
 Phase 3 — Synthesis (14B model)
     The orchestrator 14B model receives both static + semantic findings,
-    deduplicates, ranks by severity, and produces review.md + documentation.md.
+    deduplicates, ranks by severity, and produces review.md.
 """
 
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Tuple
 
@@ -141,21 +142,44 @@ class ReviewPipeline:
         # ------------------------------------------------------------------
         print(f"\n[Phase 2/3] Launching {len(SPECIALIZATIONS)} semantic workers...")
         semantic_findings: List[Finding] = []
+        safe_workers = 1
+        total_workers = len(SPECIALIZATIONS)
+        db_lock = threading.Lock()
 
-        with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+        with ThreadPoolExecutor(max_workers=safe_workers) as pool:
             futures = {
                 pool.submit(
-                    self._run_worker, spec, user_request
+                    self._run_worker, spec, user_request, db_lock
                 ): spec
                 for spec in SPECIALIZATIONS
             }
-            for future in as_completed(futures):
-                try:
-                    findings = future.result()
-                    semantic_findings.extend(findings)
-                except Exception as e:
+            completed = 0
+            try:
+                for future in as_completed(futures):
                     spec = futures[future]
-                    print(f"  [Worker] {spec[:30]}... error: {e}")
+                    completed += 1
+                    try:
+                        findings = future.result()
+                        semantic_findings.extend(findings)
+                        # Print successful completion progress
+                        short_spec = spec.split('(')[0].strip()
+                        print(f"  [Progress] {completed}/{total_workers} workers done. (Finished: {short_spec})")
+                    except Exception as e:
+                        short_spec = spec.split('(')[0].strip()
+                        print(f"  [Progress] {completed}/{total_workers} workers done. (Error in {short_spec}: {e})")
+            except KeyboardInterrupt:
+                print("\n[!] Force quitting: Review interrupted by user. Cancelling pending workers...")
+                pool.shutdown(wait=False, cancel_futures=True)
+                raise  #
+
+
+            # for future in as_completed(futures):
+            #     try:
+            #         findings = future.result()
+            #         semantic_findings.extend(findings)
+            #     except Exception as e:
+            #         spec = futures[future]
+            #         print(f"  [Worker] {spec[:30]}... error: {e}")
 
         print(f"  Semantic analysis: {len(semantic_findings)} finding(s).")
 
@@ -171,10 +195,10 @@ class ReviewPipeline:
         )
 
         self._save("review.md", review_md)
-        self._save("documentation.md", docs_md)
+        # self._save("documentation.md", docs_md)
 
         print(f"\n{'─'*55}")
-        print(" Review complete → review.md, documentation.md")
+        print(" Review complete → review.md")
         print(f"{'─'*55}\n")
         return review_md, docs_md
 
@@ -182,12 +206,13 @@ class ReviewPipeline:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _run_worker(self, specialization: str, user_request: str) -> List[Finding]:
+    def _run_worker(self, specialization: str, user_request: str,lock: threading.Lock = None) -> List[Finding]:
         worker = WorkerAgent(
             specialization=specialization,
             retriever=self.retriever,
             chunks_per_search=6,
             max_rounds=3,
+            db_lock=lock
         )
         return worker.run(user_request)
 
@@ -271,7 +296,7 @@ class ReviewPipeline:
                 
         return ""
 
-    @staticmethod
+    # @staticmethod
     def _save(self, filename: str, content: str):
         if content:
             path = os.path.join(self.output_dir, filename)

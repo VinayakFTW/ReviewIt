@@ -316,7 +316,7 @@ ORCHESTRATOR_MODEL = "qwen2.5-coder:32b"
 
 ## 🗺️ Roadmap
 
-- [ ] Fix `ReviewPipeline._save` staticmethod bug
+- [x] Fix `ReviewPipeline._save` staticmethod bug
 - [ ] Persist dep-graph symbol maps (JSON sidecar alongside GraphML)
 - [ ] `OLLAMA_BASE_URL` env var for remote Ollama support
 - [ ] CUDA device auto-detection with CPU fallback

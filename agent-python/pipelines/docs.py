@@ -143,7 +143,7 @@ class DocsPipeline:
         all_files = list(Path(self.source_dir).glob("**/*.py"))
         all_files = [
             str(f) for f in all_files
-            if not any(p in f.parts for p in (".venv", "venv", "__pycache__"))
+            if not any(p in f.parts for p in (".venv", "venv", "__pycache__", "site-packages","dist","build"))
         ]
         print(f"[Docs] {len(all_files)} Python files to document.")
         self._document_files(all_files, update_architecture=True)

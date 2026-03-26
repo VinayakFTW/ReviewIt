@@ -1,101 +1,75 @@
 # High-Level Architecture Overview
 
 ## System Purpose
-The retrieval system is designed to provide comprehensive codebase analysis, documentation generation, and interactive Q&A capabilities. It leverages various modules to manage different aspects of the system, including ingestion, indexing, retrieval, and processing user queries.
+The system is a comprehensive code review assistant tool designed to automate the review of code changes, offering insights and suggestions based on predefined criteria and best practices. It integrates various modules to handle tasks such as model downloading, environment setup, retrieval systems, and interactive Q&A functionalities.
 
 ## Module Responsibilities
 
-- **main.py**
-  - Initializes and runs the retrieval system.
-  - Loads essential components such as a vector store.
-  - Handles command-line interactions.
+- **cli.py**: Provides a command-line interface (CLI) for the code review assistant tool. Handles user input, initializes the CLI application, and interacts with external review services.
+  
+- **download_model.py**: Manages the downloading of machine learning models from a remote server. Includes functionality to specify model types, versions, and destinations for local storage, ensuring data integrity post-download.
 
-- **qa.py**
-  - Provides a Q&A system for interactive use.
-  - Manages question answering tasks using a `HybridRetriever`.
+- **main.py**: Provides functionality for a hybrid retrieval system. Initializes necessary components like a vector store and handles command-line interactions.
 
-- **review.py**
-  - Orchestrates a comprehensive code review process.
-  - Executes static and semantic analysis on user-provided code.
+- **setup.py**: Manages the setup and configuration of the Ollama environment. Includes checks for installation status, functions to install Ollama, pull models, bootstrap dependencies, and set up environment paths.
 
-- **docs.py**
-  - Generates and updates documentation for a codebase.
-  - Supports incremental updates and full regeneration of documentation.
+- **model_manager.py**: Provides utility functions for managing models in an Ollama environment, focusing on unloading and warming up models to optimize resource usage and performance.
 
-- **worker.py**
-  - Processes user requests to generate analysis findings.
-  - Utilizes language models for code snippet analysis.
+- **orchestrator.py**: Manages a multi-agent pipeline aimed at generating comprehensive reports and documentation. Handles worker execution, planning depth, parameter conversion, finding formatting, synthesis using a 14B model, HTML tag extraction, and file saving.
 
-- **model_manager.py**
-  - Manages models in an environment using Ollama.
-  - Facilitates unloading, pre-loading, and checking the status of models.
+- **paths.py**: Provides utility functions to retrieve various directory paths used by the application, ensuring they are writable where necessary.
 
-- **orchestrator.py**
-  - Coordinates a multi-agent pipeline to handle user requests.
-  - Plans the depth of review, executes tasks, and synthesizes results.
+- **worker.py**: Provides the `WorkerAgent` class responsible for processing user requests by generating search queries, analyzing code snippets, and parsing results.
 
-- **hybrid_retriever.py**
-  - Provides hybrid retrieval of code symbols based on natural language queries.
-  - Combines vector search with dependency graph expansion.
+- **ast_parser.py**: Provides functionality for parsing Python source code and performing static analysis. Includes classes for abstract syntax tree parsing and static finding encapsulation.
 
-- **run_ingest.py**
-  - Executes the ingestion process for indexing source code.
-  - Orchestrates data acquisition, processing, and storage tasks.
+- **dep_graph.py**: Provides a `DependencyGraph` class for analyzing file dependencies in a codebase. Manages directed graphs internally to handle dependency relationships.
 
-- **embedder.py**
-  - Manages documents using a vector store.
-  - Provides functionality for embedding and managing documents.
+- **embedder.py**: Provides functionality for embedding file content into a vector store using HuggingFace embeddings and storing it in ChromaDB. Handles the creation and loading of vector stores.
 
-- **dep_graph.py**
-  - Analyzes and queries a dependency graph constructed from file analysis data.
-  - Supports hybrid retrieval systems by expanding search contexts.
+- **run_ingest.py**: Handles the ingestion and indexing of code from a specified source directory, ensuring all relevant files are parsed and stored appropriately.
 
-- **ast_parser.py**
-  - Parses Python source code and performs static analysis.
-  - Utilizes the `ast` module for abstract syntax tree parsing.
+- **symbol_index.py**: Provides a `SymbolIndex` class for managing a symbol database using SQLite. Manages the indexing and retrieval of symbols (functions, classes) from source files efficiently.
 
-- **symbol_index.py**
-  - Manages a symbol database using SQLite.
-  - Provides indexing and retrieval capabilities for symbols.
+- **docs.py**: Provides functionality to generate and update documentation for a codebase. Supports incremental updates based on changed files or full re-documentation of the entire codebase.
+
+- **qa.py**: Provides a Q&A system designed for interactive use, allowing users to ask questions about a codebase. Manages efficient information retrieval through a `HybridRetriever`.
+
+- **review.py**: Provides a framework for orchestrating a comprehensive code review process. Manages the execution of the review pipeline, generating findings and synthesizing them into human-readable formats.
+
+- **hybrid_retriever.py**: Provides functionality for hybrid retrieval of code symbols using a combination of vector search and dependency graph expansion. Supports efficient symbol retrieval and context formatting.
 
 ## Data Flow Between Modules
 
-1. **main.py** initializes the system and loads shared resources, including the vector store.
-2. **run_ingest.py** orchestrates the ingestion process, parsing source code and building an index.
-3. **embedder.py** manages document embedding using a vector store, which is then used by other modules for retrieval.
-4. **dep_graph.py** constructs and queries a dependency graph, providing context for hybrid retrieval.
-5. **ast_parser.py** performs static analysis on Python source code, generating findings that are processed by the review system.
-6. **review.py** orchestrates the code review process, utilizing static and semantic analysis results.
-7. **qa.py** handles interactive Q&A sessions, using a `HybridRetriever` to retrieve answers based on user queries.
-8. **docs.py** generates or updates documentation for the codebase, leveraging the indexed data.
-9. **worker.py** processes user requests, generating analysis findings using language models.
-10. **model_manager.py** manages model loading and unloading, optimizing performance.
-11. **orchestrator.py** coordinates tasks across multiple agents, planning and synthesizing results.
+1. **cli.py** receives user input through the command line.
+2. **setup.py** checks the environment status, installs necessary components, and sets up paths.
+3. **download_model.py** downloads models as required by other modules.
+4. **main.py** initializes the hybrid retrieval system and handles CLI interactions.
+5. **model_manager.py** manages model unloading and warming up based on usage patterns.
+6. **orchestrator.py** orchestrates multi-agent pipelines, managing worker execution and result synthesis.
+7. **paths.py** provides directory paths for various components to use.
+8. **worker.py** processes user requests by generating search queries and analyzing code snippets.
+9. **ast_parser.py** parses Python source code and performs static analysis.
+10. **dep_graph.py** analyzes file dependencies using a dependency graph.
+11. **embedder.py** embeds file content into a vector store for efficient retrieval.
+12. **run_ingest.py** ingests and indexes code from the specified source directory.
+13. **symbol_index.py** manages symbol database operations, indexing and retrieving symbols.
+14. **docs.py** generates and updates documentation based on the indexed data.
+15. **qa.py** handles interactive Q&A sessions using a hybrid retriever.
+16. **review.py** orchestrates the code review process, generating comprehensive reports.
+17. **hybrid_retriever.py** performs hybrid retrieval of code symbols for efficient information access.
 
 ## External Dependencies
 
-- **Vector Store (e.g., ChromaDB)**
-  - Used by `embedder.py` for document embedding and retrieval.
-  
-- **Dependency Graph (NetworkX)**
-  - Utilized by `dep_graph.py` for analyzing and querying dependencies.
+- **argparse**: Used by `cli.py` for parsing command-line arguments.
+- **requests**: Used by multiple modules (`cli.py`, `download_model.py`) for making HTTP requests to external services and servers.
+- **json**: Used by `cli.py` for handling JSON data interchange.
+- **tqdm**: Used by `download_model.py` for displaying progress bars during downloads.
+- **os**, **sys**, **pathlib**: Used by `paths.py` for file system operations and path manipulations.
+- **sqlite3**: Used by `symbol_index.py` for database operations.
+- **NetworkX**: Used by `dep_graph.py` to manage directed graphs internally.
+- **LangChain**: Used by `embedder.py` for document handling.
+- **HuggingFace**: Used by `embedder.py` for embedding models.
+- **ChromaDB**: Used by `embedder.py` for vector storage.
 
-- **Static Analysis Libraries**
-  - Required by `ast_parser.py` for parsing and analyzing Python source code.
-
-- **SQLite Database**
-  - Used by `symbol_index.py` for indexing and retrieving symbols.
-
-- **Ollama (Machine Learning Model Management)**
-  - Managed by `model_manager.py` for model loading and unloading.
-
-- **Command-Line Interface Libraries**
-  - Required by `main.py` for handling user interactions.
-
-- **File System Operations**
-  - Used by various modules for reading, writing, and detecting changes in source code files.
-
-- **Network Connectivity**
-  - Necessary for communication with Ollama and other external services.
-
-This architecture ensures a modular and scalable system capable of efficiently managing codebase analysis, documentation generation, and interactive Q&A functionalities.
+This architecture ensures a modular and extensible system, allowing developers to integrate additional review plugins or modify existing ones to suit specific project needs.

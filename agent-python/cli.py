@@ -15,10 +15,7 @@ def main():
     print("Note: Please ensure Ollama is running in the background.\n")
     
     print("Checking Ollama status...")
-    if not is_ollama_running():
-        print("[Error] Ollama is not responding. Please ensure Ollama is running in the background.")
-        sys.exit(1)
-    print("[OK] Ollama is running.\n")
+    bootstrap_dependencies()
     
     app_dir = get_app_dir()
     env_path = get_env_path()
@@ -60,7 +57,6 @@ def main():
             if not os.path.exists(env_path):
                 open(env_path, 'a').close()
 
-            bootstrap_dependencies()
             setup_environment(repo_path)      # sets all os.environ keys cleanly
 
             # Write back to .env for persistence across restarts

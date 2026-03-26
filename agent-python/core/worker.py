@@ -4,7 +4,7 @@ core/worker.py  (updated)
 WorkerAgent now uses the HybridRetriever rather than the raw MemoryManager.
 This gives it dep-graph-expanded context instead of pure similarity hits.
 """
-
+import threading
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -62,15 +62,16 @@ Code:
 
 
 class WorkerAgent:
-    def __init__(self, specialization, retriever, chunks_per_search=6, max_rounds=3):
+    def __init__(self, specialization, retriever, chunks_per_search=6, max_rounds=3,db_lock=None):
         self.specialization = specialization
         self.retriever = retriever
         self.chunks_per_search = chunks_per_search
         self.max_rounds = max_rounds
         self.llm = ChatOllama(model=WORKER_MODEL, temperature=0.0, keep_alive="5m")
+        self.db_lock = db_lock or threading.Lock()
 
     def run(self, user_request: str) -> List[Finding]:
-        print(f"  [Worker:{self._short()}] Starting...")
+        print(f"  [Worker:{self.specialization}] Starting...")
         all_findings: List[Finding] = []
         seen: set = set()
         queries = self._generate_queries(user_request)
@@ -78,10 +79,13 @@ class WorkerAgent:
         for round_idx in range(self.max_rounds):
             new_contexts = []
             for query in queries:
-                contexts = self.retriever.retrieve(
-                    query=query, vector_k=self.chunks_per_search, dep_hops=1,
-                    max_total=self.chunks_per_search,
-                )
+                # ---> LOCK ACQUIRED HERE: Safely query ChromaDB + SQLite <---
+                with self.db_lock:
+                    contexts = self.retriever.retrieve(
+                        query=query, vector_k=self.chunks_per_search, dep_hops=1,
+                        max_total=self.chunks_per_search,
+                    )
+                #LOCK RELEASED HERE <--- after retrieval is done, allowing other workers to proceed
                 for ctx in contexts:
                     key = (ctx.file, ctx.name)
                     if key not in seen:
@@ -92,6 +96,7 @@ class WorkerAgent:
                 break
 
             snippets = "\n\n---\n\n".join(ctx.format_for_prompt() for ctx in new_contexts)
+            print(f"  [Worker:{self.specialization}] Round {round_idx + 1}/{self.max_rounds}: Analysing {len(new_contexts)} snippets...")
             findings = self._analyse(snippets, new_contexts)
             all_findings.extend(findings)
 
@@ -99,7 +104,7 @@ class WorkerAgent:
                 break
             queries = self._refine_queries(queries, findings)
 
-        print(f"  [Worker:{self._short()}] {len(all_findings)} finding(s).")
+        print(f"  [Worker:{self.specialization}] {len(all_findings)} finding(s).")
         return all_findings
 
     def _short(self):

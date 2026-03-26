@@ -12,3 +12,4 @@ networkx
 optimum
 gitpython
 python-dotenv
+rich

@@ -122,7 +122,7 @@ def bootstrap_dependencies():
         try:
             use_shell = sys.platform == "win32"
             subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=use_shell)
-            time.sleep(3)
+            time.sleep(5)
         except Exception:
             pass
             

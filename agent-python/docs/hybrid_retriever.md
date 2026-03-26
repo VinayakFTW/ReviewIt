@@ -1,6 +1,6 @@
 # `hybrid_retriever.py`
 
-This module provides functionality for hybrid retrieval of code symbols based on natural language queries. It includes a `HybridRetriever` class that combines vector search with dependency graph expansion to find relevant code contexts. The public API consists of the `HybridRetriever.retrieve` method, which performs the hybrid retrieval, and helper functions like `lookup_symbol`, `retrieve_for_file`, and `format_context`. Key dependencies include classes for handling code context (`CodeContext`) and symbol rows (`SymbolRow`). This module is used by all three agent processes.
+This module provides functionality for hybrid retrieval of code symbols using a combination of vector search and dependency graph expansion. The public API includes the `HybridRetriever` class, which initializes with parameters such as embeddings client, database connection, and configuration settings. Key methods are `retrieve`, which performs hybrid retrieval for a natural language query, and `lookup_symbol`, which returns all definitions of a specific symbol name. Additional utility functions like `format_context` and `_vector_search` support the main operations. The module depends on classes such as `CodeContext` to format code information for prompts and manage retrieved symbol data. This functionality is utilized by three different agent processes.
 
 ## Classes
 
@@ -18,29 +18,29 @@ Methods: `__init__`, `retrieve`, `lookup_symbol`, `retrieve_for_file`, `format_c
 ## Functions
 
 ### `def format_for_prompt(self) -> str:`
-*retrieval/hybrid_retriever.py:53*
+*D:\CodeSentinel\agent-python\retrieval\hybrid_retriever.py:53*
 
 Formats a prompt string for displaying code information.
 
 Parameters:
 - None
 
-Returns:
+Return value:
 - A formatted string containing the header and source code.
 
 Raises:
 - None
 
 ### `def __init__(self, vector_store: Chroma, dep_graph: DependencyGraph, symbol_index: SymbolIndex, vector_k: int=8, dep_hops: int=1, max_total: int=20):`
-*retrieval/hybrid_retriever.py:69*
+*D:\CodeSentinel\agent-python\retrieval\hybrid_retriever.py:69*
 
 Initializes a new instance of the class with the provided parameters.
 
 Parameters:
 - vector_store (Chroma): The vector store to use for similarity searches.
-- dep_graph (DependencyGraph): The dependency graph representing relationships between symbols.
-- symbol_index (SymbolIndex): The index for efficiently looking up symbols.
-- vector_k (int, optional): The number of top vectors to retrieve from the vector store. Defaults to 8.
+- dep_graph (DependencyGraph): The dependency graph to traverse for related symbols.
+- symbol_index (SymbolIndex): The index of symbols to search through.
+- vector_k (int, optional): The number of nearest neighbors to retrieve from the vector store. Defaults to 8.
 - dep_hops (int, optional): The number of hops to traverse in the dependency graph. Defaults to 1.
 - max_total (int, optional): The maximum total number of results to return. Defaults to 20.
 
@@ -48,10 +48,10 @@ Return value:
 None
 
 Raises:
-No exceptions are raised by this method.
+No specific exceptions are raised by this method.
 
 ### `def retrieve(self, query: str, vector_k: Optional[int]=None, dep_hops: Optional[int]=None, max_total: Optional[int]=None) -> List[CodeContext]:`
-*retrieval/hybrid_retriever.py:89*
+*D:\CodeSentinel\agent-python\retrieval\hybrid_retriever.py:89*
 
 Run hybrid retrieval for a natural language query.
 
@@ -65,25 +65,25 @@ Returns:
     Deduplicated list of CodeContext, best matches first.
 
 ### `def lookup_symbol(self, name: str) -> List[CodeContext]:`
-*retrieval/hybrid_retriever.py:138*
+*D:\CodeSentinel\agent-python\retrieval\hybrid_retriever.py:138*
 
 Exact symbol name lookup — returns all definitions of `name`
 with their source, ranked by specificity.
 
 ### `def retrieve_for_file(self, filepath: str) -> List[CodeContext]:`
-*retrieval/hybrid_retriever.py:146*
+*D:\CodeSentinel\agent-python\retrieval\hybrid_retriever.py:146*
 
 Fetch all symbols defined in a specific file.
 Used by the docs pipeline for per-file documentation.
 
 ### `@staticmethod`
-*retrieval/hybrid_retriever.py:159*
+*D:\CodeSentinel\agent-python\retrieval\hybrid_retriever.py:159*
 
 Concatenate retrieved contexts into a single prompt block.
 Truncates cleanly at symbol boundaries to stay within token limits.
 
 ### `def _vector_search(self, query: str, k: int) -> List[CodeContext]:`
-*retrieval/hybrid_retriever.py:182*
+*D:\CodeSentinel\agent-python\retrieval\hybrid_retriever.py:182*
 
 Performs a vector search for the given query and returns the top k results as CodeContext objects.
 
@@ -98,7 +98,7 @@ Raises:
 Exception: If an error occurs during the vector search, it is caught and printed, then an empty list is returned.
 
 ### `def _row_to_context(self, row: SymbolRow, method: str, score: float) -> CodeContext:`
-*retrieval/hybrid_retriever.py:209*
+*D:\CodeSentinel\agent-python\retrieval\hybrid_retriever.py:209*
 
 Converts a SymbolRow to a CodeContext object.
 
@@ -108,7 +108,7 @@ Parameters:
 - score (float): The retrieval score associated with the row.
 
 Returns:
-CodeContext: A CodeContext object populated with data from the symbol row and additional metadata.
+CodeContext: A CodeContext object populated with data from the SymbolRow and additional metadata.
 
 Raises:
-No specific exceptions are raised by this function.
+No specific exceptions raised.

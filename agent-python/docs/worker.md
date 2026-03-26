@@ -1,6 +1,6 @@
 # `worker.py`
 
-This module provides the `WorkerAgent` class, which is responsible for processing user requests to generate analysis findings. The public API includes the `run` method, which initiates the analysis process. Key dependencies include language models for code snippet analysis and utilities for parsing and refining search queries. The module also defines a private helper function `_analyse` for analyzing code snippets and a `Finding` class for encapsulating individual analysis results.
+This module provides the `WorkerAgent` class, which is responsible for processing user requests by generating search queries, analyzing code snippets, and parsing results. The public API includes the `run` method to initiate the analysis process. Key dependencies include language models for analysis and utilities for parsing text. The module also defines a `Finding` class to encapsulate parsed issue details.
 
 ## Classes
 
@@ -16,44 +16,45 @@ Methods: `__init__`, `run`, `_short`, `_generate_queries`, `_refine_queries`, `_
 
 ## Functions
 
-### `def __init__(self, specialization, retriever, chunks_per_search=6, max_rounds=3):`
-*core/worker.py:68*
+### `def __init__(self, specialization, retriever, chunks_per_search=6, max_rounds=3, db_lock=None):`
+*D:\CodeSentinel\agent-python\core\worker.py:65*
 
 Initializes a new instance of the class with the given parameters.
 
 Parameters:
-- specialization (str): The specialization area for the model.
-- retriever: The document retrieval system to use.
+- specialization (str): The specialization area for the instance.
+- retriever: The retriever object used to fetch data.
 - chunks_per_search (int, optional): Number of chunks to search per round. Defaults to 6.
-- max_rounds (int, optional): Maximum number of rounds for searching. Defaults to 3.
+- max_rounds (int, optional): Maximum number of rounds allowed. Defaults to 3.
+- db_lock (threading.Lock, optional): Lock for database operations. If not provided, a new lock is created.
 
-Return value:
+Returns:
 None
 
 Raises:
 None
 
 ### `def run(self, user_request: str) -> List[Finding]:`
-*core/worker.py:75*
+*D:\CodeSentinel\agent-python\core\worker.py:73*
 
-Runs the analysis process on a user request to generate a list of findings.
+Runs the analysis process for a given user request.
 
 Parameters:
-- user_request (str): The input query or request from the user.
+- `user_request` (str): The input query or request from the user.
 
 Returns:
-List[Finding]: A list of Finding objects containing the results of the analysis.
+- List[Finding]: A list of findings generated from the analysis.
 
 Raises:
-None.
+- None explicitly documented.
 
 ### `def _short(self):`
-*core/worker.py:108*
+*D:\CodeSentinel\agent-python\core\worker.py:109*
 
-Returns a string containing the first two words of the specialization attribute. No parameters. Returns a string. Raises no exceptions.
+Returns a string containing the first two words of the `specialization` attribute. No parameters. Returns a string. Raises no exceptions.
 
 ### `def _generate_queries(self, user_request):`
-*core/worker.py:111*
+*D:\CodeSentinel\agent-python\core\worker.py:112*
 
 Generates a list of up to three search queries based on the user's request and the model's specialization. If an exception occurs, returns a default query derived from the model's specialization.
 
@@ -64,30 +65,30 @@ Return value:
 - List[str]: A list of up to three generated search queries, or a single default query if an error occurs.
 
 Raises:
-- Exception: Any exception that may occur during the generation process is caught and handled gracefully.
+- None: Any exceptions are caught and handled internally, returning a default value instead.
 
 ### `def _refine_queries(self, queries, findings):`
-*core/worker.py:121*
+*D:\CodeSentinel\agent-python\core\worker.py:122*
 
 Refines a list of search queries by appending up to six unique keywords extracted from the descriptions of given findings.
 
 Parameters:
-- `queries` (list of str): The original search queries.
-- `findings` (list of objects): Objects with a 'description' attribute containing relevant keywords.
+- `queries` (list): A list of original search queries.
+- `findings` (list): A list of findings, each with a 'description' attribute.
 
 Returns:
-- list of str: The refined search queries with additional keywords appended.
+- list: A new list of refined queries with additional keywords appended.
 
 Raises:
 - AttributeError: If any finding object does not have a 'description' attribute.
 
 ### `def _analyse(self, snippets, contexts):`
-*core/worker.py:128*
+*D:\CodeSentinel\agent-python\core\worker.py:129*
 
-Analyzes a list of code snippets using a language model. Parameters: snippets (list), contexts (list). Returns: A parsed list of issues or an empty list if no issues are found. Raises: Prints an error message and returns an empty list if an exception occurs during the analysis.
+Analyzes a list of code snippets using a language model. Parameters: snippets (list), contexts (list). Returns a parsed result or an empty list if no issues are found. Raises exceptions from the LLM invocation.
 
 ### `def _parse(self, raw, contexts):`
-*core/worker.py:140*
+*D:\CodeSentinel\agent-python\core\worker.py:141*
 
 Parses a raw string to extract issue blocks and returns a list of parsed findings.
 
@@ -102,24 +103,14 @@ Raises:
 - ValueError: If an issue block is malformed and cannot be parsed.
 
 ### `def _parse_block(self, block, contexts) -> Optional[Finding]:`
-*core/worker.py:151*
+*D:\CodeSentinel\agent-python\core\worker.py:152*
 
-Parses a block of text to extract finding details and returns a Finding object.
-
-Parameters:
-- block (str): The block of text to parse.
-- contexts (List[Context]): A list of Context objects for preview generation.
-
-Returns:
-Optional[Finding]: A Finding object if the description is found, otherwise None.
-
-Raises:
-None
+Parses a block of text to extract finding details and returns a Finding object if valid. Parameters: block (str): The text block to parse. contexts (list): A list of context objects. Returns: Optional[Finding]: A Finding object with parsed details or None if no description is found. Raises: No specific exceptions are raised by this function.
 
 ## Static Analysis Warnings
 
-- **[LOW]** line 108: `_short` has no return type annotation.
-- **[LOW]** line 111: `_generate_queries` has no return type annotation.
-- **[LOW]** line 121: `_refine_queries` has no return type annotation.
-- **[LOW]** line 128: `_analyse` has no return type annotation.
-- **[LOW]** line 140: `_parse` has no return type annotation.
+- **[LOW]** line 109: `_short` has no return type annotation.
+- **[LOW]** line 112: `_generate_queries` has no return type annotation.
+- **[LOW]** line 122: `_refine_queries` has no return type annotation.
+- **[LOW]** line 129: `_analyse` has no return type annotation.
+- **[LOW]** line 141: `_parse` has no return type annotation.

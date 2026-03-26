@@ -1,13 +1,13 @@
 # `main.py`
 
-This module provides functionality for initializing and running a retrieval system. It includes a `load_shared_resources` function to load essential components such as a vector store. The `main` function acts as the primary entry point, handling command-line interactions. Key dependencies include libraries for managing vector stores and processing user queries. This module is designed to be executed from the command line, offering users access to the retrieval system's capabilities through a simple interface.
+This module provides functionality for a hybrid retrieval system. It includes a `load_shared_resources` function to initialize necessary components like a vector store. The `main` function acts as the primary entry point, handling command-line interactions. Key dependencies include libraries for resource management and CLI parsing. This module is essential for setting up and running the hybrid retrieval system effectively.
 
 ## Functions
 
 ### `def load_shared_resources():`
-*main.py:33*
+*D:\CodeSentinel\agent-python\main.py:32*
 
-Loads shared resources for a retrieval system, including a vector store, dependency graph, and symbol index. Initializes and returns a hybrid retriever.
+Loads shared resources for a hybrid retrieval system, including a vector store, dependency graph, and symbol index. Initializes and returns a `HybridRetriever` object.
 
 Parameters:
 - None
@@ -16,15 +16,15 @@ Returns:
 - A `HybridRetriever` object configured with the loaded resources.
 
 Raises:
-- FileNotFoundError if the dependency graph path does not exist and no re-indexing has been run.
+- FileNotFoundError: If the dependency graph path does not exist and cannot be re-indexed.
 
 ### `def main():`
-*main.py:60*
+*D:\CodeSentinel\agent-python\main.py:62*
 
-This function serves as the main entry point for a command-line interface that interacts with codebase analysis and documentation tools. It checks if Ollama is running, verifies the existence of a vector store, initializes various pipelines for Q&A, review, and documentation updates, and provides a menu-driven interface for users to select actions such as asking questions about the code, performing a full codebase audit, updating documentation, or re-indexing the data. The function handles user input and executes corresponding pipeline methods based on the user's choice. It also includes error handling for missing Ollama service and vector store, and provides options to exit the program gracefully.
+This function serves as the main entry point for a command-line interface that interacts with codebase data. It initializes various components such as directories, pipelines, and models, and provides an interactive menu for users to perform Q&A, review, documentation updates, or re-indexing tasks. The function handles user input, checks for necessary conditions (like Ollama running and vector store existence), and manages the lifecycle of different processing pipelines. It also includes error handling for keyboard interrupts and invalid inputs.
 
 ## Static Analysis Warnings
 
-- **[LOW]** line 33: `load_shared_resources` has no return type annotation.
-- **[LOW]** line 60: `main` is 62 lines long (limit: 60).
-- **[LOW]** line 60: `main` has no return type annotation.
+- **[LOW]** line 32: `load_shared_resources` has no return type annotation.
+- **[LOW]** line 62: `main` is 66 lines long (limit: 60).
+- **[LOW]** line 62: `main` has no return type annotation.
