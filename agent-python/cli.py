@@ -22,11 +22,11 @@ def main():
     
     with console.status("[magenta]Checking Ollama status...[/magenta]", spinner="dots"):
         if not is_ollama_running():
-            # bootstrap_dependencies()
+            bootstrap_dependencies()
             console.print("[bold red]✖ Error: Ollama is not responding.[/bold red] Attempting to Start Ollama...")
             sys.exit(1)
     console.print("[bold green]✔ Ollama is running.[/bold green]\n")
-    
+    bootstrap_dependencies()
     app_dir = get_app_dir()
     env_path = get_env_path()
     load_dotenv(dotenv_path=env_path)
@@ -62,7 +62,7 @@ def main():
                 if not os.path.exists(env_path):
                     open(env_path, 'a').close()
 
-                bootstrap_dependencies()
+                # bootstrap_dependencies()
                 setup_environment(repo_path)
 
                 from dotenv import set_key
