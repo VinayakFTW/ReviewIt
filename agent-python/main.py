@@ -19,43 +19,36 @@ from core.paths import (
     get_source_dir, get_persist_dir, get_symbol_db,
     get_dep_graph, get_docs_dir,get_env_path
 )
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.prompt import Prompt
+
 load_dotenv(dotenv_path=get_env_path())
 
-BANNER = """
-========================================================
-|              Code-Sentinel  v1  (Hybrid)             |
-|  AST + DepGraph + SymbolIndex + Vector + 10 Workers  |
-========================================================
-"""
-
+console = Console()
 
 def load_shared_resources():
     VECTOR_DIR = get_persist_dir()
     GRAPH_PATH = get_dep_graph()
     SYMBOL_DB  = get_symbol_db()
-    print("[Init] Loading vector store...")
-    vector_store = load_vector_store(VECTOR_DIR)
-
-    print("[Init] Loading dependency graph...")
-    dep_graph = DependencyGraph()
-    if os.path.exists(GRAPH_PATH):
-        dep_graph.load(GRAPH_PATH)
-    else:
-        print(f"  WARNING: No dep graph at '{GRAPH_PATH}'. Run re-index first.")
-
-    print("[Init] Loading symbol index...")
-    symbol_index = SymbolIndex(db_path=SYMBOL_DB)
-    print(f"  Symbols: {symbol_index.stats()}")
-
-    retriever = HybridRetriever(
-        vector_store=vector_store,
-        dep_graph=dep_graph,
-        symbol_index=symbol_index,
-        vector_k=8,
-        dep_hops=1,
-        max_total=20,
-    )
-    print("[Init] Hybrid retriever ready.\n")
+    
+    with console.status("[bold cyan]Loading Sentinel Cores...[/bold cyan]", spinner="arc"):
+        vector_store = load_vector_store(VECTOR_DIR)
+        
+        dep_graph = DependencyGraph()
+        if os.path.exists(GRAPH_PATH):
+            dep_graph.load(GRAPH_PATH)
+            
+        symbol_index = SymbolIndex(db_path=SYMBOL_DB)
+        stats = symbol_index.stats()
+        
+        retriever = HybridRetriever(
+            vector_store=vector_store, dep_graph=dep_graph, symbol_index=symbol_index,
+            vector_k=8, dep_hops=1, max_total=20,
+        )
+    console.print(f"[green]✔[/green] Engines Online. Indexed: {stats['files']} files, {stats['functions']} functions.")
     return retriever
 
 
@@ -67,7 +60,11 @@ def main():
     SYMBOL_DB  = get_symbol_db()
     DOCS_DIR   = get_docs_dir(SOURCE_DIR)
 
-    print(BANNER)
+    console.print(Panel.fit(
+        "[bold cyan]Code-Sentinel v2 (Hybrid)[/bold cyan]\n"
+        "[dim]AST + DepGraph + Vector + 10 Specialist Workers[/dim]",
+        border_style="cyan"
+    ))
 
     if not check_ollama_running():
         print("ERROR: Ollama is not running. Start with: ollama serve")
@@ -88,18 +85,19 @@ def main():
     # warmup_model(ORCHESTRATOR_MODEL, keep_alive_seconds=1800)
 
     while True:
-        print("=======================================")
-        print("|  [1] Q&A        Ask about the code  |")
-        print("|  [2] Review     Full codebase audit |")
-        print("|  [3] Docs       Update documentation|")
-        print("|  [4] Re-index   Re-run ingest       |")
-        print("|  [q] Quit                           |")
-        print("=======================================")
+        menu = Table(show_header=False, box=None)
+        menu.add_row("[bold cyan][1][/bold cyan]", "Q&A", "[dim]Ask about the code[/dim]")
+        menu.add_row("[bold cyan][2][/bold cyan]", "Review", "[dim]Full codebase audit[/dim]")
+        menu.add_row("[bold cyan][3][/bold cyan]", "Docs", "[dim]Update documentation[/dim]")
+        menu.add_row("[bold cyan][4][/bold cyan]", "Re-index", "[dim]Re-run ingest[/dim]")
+        menu.add_row("[bold red][q][/bold red]", "Quit", "")
+        
+        console.print(Panel(menu, title="Main Menu", border_style="blue", expand=False))
 
         try:
-            choice = input("Choice: ").strip().lower()
+            choice = Prompt.ask("[bold yellow]Action[/bold yellow]", choices=["1", "2", "3", "4", "q", "quit", "exit"])
         except (KeyboardInterrupt, EOFError):
-            print("\nExiting.")
+            console.print("\n[red]Exiting.[/red]")
             break
 
         if choice in ("q", "quit", "exit"):
@@ -107,17 +105,17 @@ def main():
         elif choice == "1":
             qa_pipeline.interactive_loop()
         elif choice == "2":
-            scope = input("Scope (Enter = full audit): ").strip() or "Full codebase audit"
+            scope = Prompt.ask("Scope", default="Full codebase audit")
             review_pipeline.run(user_request=scope)
         elif choice == "3":
-            mode = input("Full [f] or incremental [i]? ").strip().lower()
+            mode = Prompt.ask("Full [f] or incremental [i]?", choices=["f", "i"])
             if mode == "f":
                 docs_pipeline.run_full()
             else:
-                since = input("Since ref (default HEAD~1): ").strip() or "HEAD~1"
+                since = Prompt.ask("Since ref (default HEAD~1):", default="HEAD~1")
                 docs_pipeline.run_incremental(since=since)
         elif choice == "4":
-            src = input(f"Source dir (default {SOURCE_DIR}): ").strip() or SOURCE_DIR
+            src = Prompt.ask(f"Source dir (default {SOURCE_DIR}):", default=SOURCE_DIR)
             from ingest.run_ingest import run_ingest
             run_ingest(src, clean=True)
             retriever = load_shared_resources()
@@ -125,7 +123,7 @@ def main():
             review_pipeline.retriever = retriever
             docs_pipeline.retriever = retriever
         else:
-            print("Invalid choice.")
+            console.print("[red]Invalid choice.[/red]")
 
 if __name__ == "__main__":
     main()

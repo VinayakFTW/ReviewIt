@@ -7,7 +7,7 @@ This gives it dep-graph-expanded context instead of pure similarity hits.
 import threading
 from dataclasses import dataclass
 from typing import List, Optional
-
+from rich import print
 from langchain_ollama import ChatOllama
 
 from core.model_manager import WORKER_MODEL
@@ -67,11 +67,10 @@ class WorkerAgent:
         self.retriever = retriever
         self.chunks_per_search = chunks_per_search
         self.max_rounds = max_rounds
-        self.llm = ChatOllama(model=WORKER_MODEL, temperature=0.0, keep_alive="5m")
+        self.llm = ChatOllama(model=WORKER_MODEL, temperature=0.05, keep_alive="5m", num_ctx=32768)
         self.db_lock = db_lock or threading.Lock()
 
     def run(self, user_request: str) -> List[Finding]:
-        print(f"  [Worker:{self.specialization}] Starting...")
         all_findings: List[Finding] = []
         seen: set = set()
         queries = self._generate_queries(user_request)
@@ -96,7 +95,6 @@ class WorkerAgent:
                 break
 
             snippets = "\n\n---\n\n".join(ctx.format_for_prompt() for ctx in new_contexts)
-            print(f"  [Worker:{self.specialization}] Round {round_idx + 1}/{self.max_rounds}: Analysing {len(new_contexts)} snippets...")
             findings = self._analyse(snippets, new_contexts)
             all_findings.extend(findings)
 
@@ -104,16 +102,17 @@ class WorkerAgent:
                 break
             queries = self._refine_queries(queries, findings)
 
-        print(f"  [Worker:{self.specialization}] {len(all_findings)} finding(s).")
         return all_findings
 
     def _short(self):
         return " ".join(self.specialization.split()[:2])
 
     def _generate_queries(self, user_request):
+        from rich import print as rprint
         prompt = _SEARCH_QUERY_PROMPT.format(
             specialization=self.specialization, user_request=user_request)
         try:
+            rprint(f"  [dim]↳ Worker '{self._short()}' querying 0.5b model...[/dim]")
             response = self.llm.invoke([("human", prompt)]).content.strip()
             queries = [q.strip() for q in response.split("\n") if q.strip()]
             return queries[:3] or [self.specialization.split("(")[0].strip()]
@@ -128,6 +127,8 @@ class WorkerAgent:
         return [f"{q} {extra}" for q in queries]
 
     def _analyse(self, snippets, contexts):
+        from rich import print as rprint
+        rprint(f"  [dim]↳ Worker '{self._short()}' analyzing {len(contexts)} code chunks...[/dim]")
         prompt = _ANALYSIS_PROMPT.format(
             specialization=self.specialization, snippets=snippets)
         try:

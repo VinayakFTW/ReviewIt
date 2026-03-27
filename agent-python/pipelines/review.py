@@ -34,6 +34,10 @@ from retrieval.hybrid_retriever import HybridRetriever
 from core.model_manager import ORCHESTRATOR_MODEL, unload_workers
 from core.worker import WorkerAgent, Finding, SPECIALIZATIONS
 
+from rich import print
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
+from rich.panel import Panel
 
 # ---------------------------------------------------------------------------
 # Synthesis prompt
@@ -119,87 +123,97 @@ class ReviewPipeline:
             model=ORCHESTRATOR_MODEL,
             temperature=0.1,
             keep_alive="10m",
+            request_timeout=800,
         )
 
     def run(self, user_request: str = "Full codebase audit") -> Tuple[str, str]:
-        print(f"\n{'─'*55}")
-        print(f" Code Review Pipeline — scope: {user_request}")
-        print(f"{'─'*55}")
-
+        console = Console()
+        console.print(Panel(f"Scope: {user_request}", title="Code Review Pipeline", style="cyan"))
         # ------------------------------------------------------------------
         # Phase 1: Static analysis (fast, no LLM)
         # ------------------------------------------------------------------
-        print("\n[Phase 1/3] Running static analysis...")
+        console.print("\n[bold blue][Phase 1/3][/bold blue] Running static analysis...")
         analyses = parse_directory(self.source_dir)
         static_findings: List[StaticFinding] = []
         for analysis in analyses:
             static_findings.extend(analysis.static_findings)
-        print(f"  Static analysis: {len(static_findings)} finding(s) across "
-              f"{len(analyses)} files.")
+        console.print(f"  [green]✔[/green] Static analysis: {len(static_findings)} finding(s) across {len(analyses)} files.")
 
         # ------------------------------------------------------------------
         # Phase 2: 10 parallel semantic workers
         # ------------------------------------------------------------------
-        print(f"\n[Phase 2/3] Launching {len(SPECIALIZATIONS)} semantic workers...")
         semantic_findings: List[Finding] = []
         safe_workers = 1
         total_workers = len(SPECIALIZATIONS)
+        console.print(f"\n[bold blue][Phase 2/3][/bold blue] Launching {total_workers} semantic workers...")
+        import subprocess
+        try:
+            # Tell Ollama to immediately unload the Orchestrator to free up the VRAM
+            subprocess.run(["ollama", "stop", ORCHESTRATOR_MODEL], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
         db_lock = threading.Lock()
 
-        with ThreadPoolExecutor(max_workers=safe_workers) as pool:
-            futures = {
-                pool.submit(
-                    self._run_worker, spec, user_request, db_lock
-                ): spec
-                for spec in SPECIALIZATIONS
-            }
-            completed = 0
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+            transient=False,
+        ) as progress:
+            
+            main_task = progress.add_task("[cyan]Analysing Codebase...", total=total_workers)
+
             try:
-                for future in as_completed(futures):
-                    spec = futures[future]
-                    completed += 1
-                    try:
-                        findings = future.result()
-                        semantic_findings.extend(findings)
-                        # Print successful completion progress
+                with ThreadPoolExecutor(max_workers=safe_workers) as pool:
+                    futures = {
+                        pool.submit(
+                            self._run_worker, spec, user_request, db_lock
+                        ): spec
+                        for spec in SPECIALIZATIONS
+                    }
+                    
+                    for future in as_completed(futures):
+                        spec = futures[future]
                         short_spec = spec.split('(')[0].strip()
-                        print(f"  [Progress] {completed}/{total_workers} workers done. (Finished: {short_spec})")
-                    except Exception as e:
-                        short_spec = spec.split('(')[0].strip()
-                        print(f"  [Progress] {completed}/{total_workers} workers done. (Error in {short_spec}: {e})")
+                        
+                        try:
+                            findings = future.result()
+                            semantic_findings.extend(findings)
+                            # Print a success message above the progress bar
+                            progress.console.print(f"  [green]✔[/green] {short_spec} ([bold]{len(findings)}[/bold] issues)")
+                        except Exception as e:
+                            progress.console.print(f"  [red]✖[/red] Error in {short_spec}: {e}")
+                        
+                        # Advance the progress bar by 1
+                        progress.advance(main_task)
+
             except KeyboardInterrupt:
-                print("\n[!] Force quitting: Review interrupted by user. Cancelling pending workers...")
-                pool.shutdown(wait=False, cancel_futures=True)
-                raise  #
+                progress.console.print("\n[bold red][!] Force quitting: Review interrupted by user. Nuking stuck threads...[/bold red]")
+                os._exit(1)
 
-
-            # for future in as_completed(futures):
-            #     try:
-            #         findings = future.result()
-            #         semantic_findings.extend(findings)
-            #     except Exception as e:
-            #         spec = futures[future]
-            #         print(f"  [Worker] {spec[:30]}... error: {e}")
-
-        print(f"  Semantic analysis: {len(semantic_findings)} finding(s).")
-
+        console.print(f"\n  [bold]Semantic analysis complete:[/bold] {len(semantic_findings)} finding(s).")
+    
         # Unload 0.5b model before loading 14B for synthesis
         unload_workers()
 
         # ------------------------------------------------------------------
         # Phase 3: 14B synthesis
         # ------------------------------------------------------------------
-        print("\n[Phase 3/3] Synthesising report with 14B model...")
-        review_md, docs_md = self._synthesise(
-            user_request, static_findings, semantic_findings
-        )
+        console.print("\n[bold blue][Phase 3/3][/bold blue] Synthesising report with 14B model...")
+            
+            # ADDED SPINNER HERE: This prevents the pipeline from appearing "frozen"
+        with console.status("[magenta]14B Orchestrator is generating the final report...[/magenta]", spinner="bouncingBar"):
+            review_md, docs_md = self._synthesise(
+                user_request, static_findings, semantic_findings
+            )
 
         self._save("review.md", review_md)
         # self._save("documentation.md", docs_md)
 
-        print(f"\n{'─'*55}")
-        print(" Review complete → review.md")
-        print(f"{'─'*55}\n")
+        console.print(f"\n[green]✔[/green] Review complete → [bold]review.md[/bold]\n")
         return review_md, docs_md
 
     # ------------------------------------------------------------------

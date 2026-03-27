@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 from typing import List
 import time
 from langchain_ollama import ChatOllama
@@ -9,6 +10,7 @@ from core.model_manager import (
     unload_workers,
     unload_model
 )
+from rich import print
 from core.worker import WorkerAgent, Finding, SPECIALIZATIONS
 
 # ---------------------------------------------------------------------------
@@ -84,6 +86,7 @@ class OrchestratorAgent:
     def __init__(self, retriever: HybridRetriever, max_workers: int = 1):
         self.retriever = retriever
         self.max_workers = max_workers
+        self.db_lock = threading.Lock()
         self.llm = ChatOllama(
             model=ORCHESTRATOR_MODEL,
             temperature=0.1,
@@ -162,6 +165,7 @@ class OrchestratorAgent:
         user_request: str,
         k: int,
         rounds: int,
+        db_lock=None
     ) -> List[Finding]:
         """Thread target — creates and runs a single WorkerAgent."""
         worker = WorkerAgent(
@@ -169,6 +173,7 @@ class OrchestratorAgent:
             retriever=retriever,
             chunks_per_search=k,
             max_rounds=rounds,
+            db_lock=db_lock
         )
         return worker.run(user_request)
 

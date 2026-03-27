@@ -9,10 +9,13 @@ import requests
 import tempfile
 import zipfile
 import shutil
+from rich.console import Console
+from rich import print
+console = Console()
 
 # The models required for the agent
 MODELS = ["qwen2.5-coder:0.5b", "qwen2.5-coder:14b"]
-
+OLLAMA_BASE_URL = "http://localhost:11434"
 def is_ollama_installed():
     """Check if the Ollama CLI is available on the system."""
     try:
@@ -23,11 +26,18 @@ def is_ollama_installed():
     except (FileNotFoundError, subprocess.CalledProcessError):
         return False
 
-def is_ollama_running():
-    """Check if the Ollama background service is responding."""
+def is_ollama_running(WORKER_MODEL=MODELS[0]) -> bool:
     try:
-        response = requests.get("http://localhost:11434/api/tags", timeout=2)
-        return response.status_code == 200
+        # Step 1: reachability
+        if requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5).status_code != 200:
+            return False
+        # Step 2: generate endpoint probe (keep_alive=0 = no VRAM committed)
+        probe = requests.post(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            json={"model": WORKER_MODEL, "prompt": ".", "keep_alive": 0, "stream": False},
+            timeout=30,
+        )
+        return probe.status_code == 200
     except requests.exceptions.RequestException:
         return False
 
@@ -98,18 +108,17 @@ def install_ollama():
 
 def pull_models():
     """Ensure both required models are downloaded."""
-    print("\n[Setup] Checking local AI models...")
+    console.print("\n[bold cyan]Checking local AI models...[/bold cyan]")
     use_shell = sys.platform == "win32"
     
     for model in MODELS:
-        print(f"\n--- Pulling {model} ---")
-        print("(This might take a while depending on your internet connection. Grab a coffee!)")
-        try:
-            subprocess.run(["ollama", "pull", model], check=True, shell=use_shell)
-            print(f"--- Successfully pulled {model} ---")
-        except subprocess.CalledProcessError as e:
-            print(f"\n[Error] Failed to pull {model}: {e}")
-            sys.exit(1)
+        with console.status(f"[magenta]Pulling {model}... (This might take a while, grab a coffee!)[/magenta]", spinner="aesthetic"):
+            try:
+                subprocess.run(["ollama", "pull", model], check=True, shell=use_shell, stdout=subprocess.DEVNULL)
+                console.print(f"  [green]✔[/green] Successfully pulled [bold]{model}[/bold]")
+            except subprocess.CalledProcessError as e:
+                console.print(f"  [red]✖[/red] Failed to pull {model}: {e}")
+                sys.exit(1)
 
 def bootstrap_dependencies():
     """Run the full pre-flight checklist."""

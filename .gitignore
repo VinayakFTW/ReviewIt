@@ -7,4 +7,6 @@ CodeSentinel.Spec
 offline_model
 data
 online.py
+dist_obfuscated
+build.sh
 .env

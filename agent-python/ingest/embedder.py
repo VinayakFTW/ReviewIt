@@ -17,7 +17,8 @@ functions rather than orphaned fragments.
 """
 
 from typing import List
-
+from rich import print
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -119,20 +120,32 @@ def build_vector_store(
     # Batch to avoid OOM on large repos
     BATCH = 1
     db = None
-    for i in range(0, len(docs), BATCH):
-        batch = docs[i : i + BATCH]
-        if db is None:
-            db = Chroma.from_documents(
-                documents=batch,
-                embedding=embedding_fn,
-                persist_directory=persist_directory or get_persist_dir(),
-                collection_name=COLLECTION_NAME,
-            )
-        else:
-            db.add_documents(batch)
-        print(f"  [Embedder] {min(i + BATCH, len(docs))}/{len(docs)} embedded...")
-
-    print(f"[Embedder] Vector store saved to '{persist_directory or get_persist_dir()}'.")
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        transient=True  # This makes the progress bar disappear cleanly when finished
+    ) as progress:
+        
+        task = progress.add_task(f"[cyan]Embedding {len(docs)} symbols...", total=len(docs))
+        
+        for i in range(0, len(docs), BATCH):
+            batch = docs[i : i + BATCH]
+            if db is None:
+                db = Chroma.from_documents(
+                    documents=batch,
+                    embedding=embedding_fn,
+                    persist_directory=persist_directory or get_persist_dir(),
+                    collection_name=COLLECTION_NAME,
+                )
+            else:
+                db.add_documents(batch)
+            
+            # Advance the progress bar
+            progress.advance(task, advance=len(batch))
+            
     return db
 
 

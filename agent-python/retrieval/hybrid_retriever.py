@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from langchain_chroma import Chroma
-
+from rich import print
 from ingest.dep_graph import DependencyGraph
 from ingest.symbol_index import SymbolIndex, SymbolRow
 

@@ -4,47 +4,52 @@ from core.paths import get_app_dir, get_env_path
 from setup import *
 from dotenv import load_dotenv
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Prompt
+from rich.table import Table
+
+console = Console()
 env_path = get_env_path()
 load_dotenv(dotenv_path=env_path)
 
-
 def main():
-    print("========================================================")
-    print("           Code-Sentinel - Code Review Assistant             ")
-    print("========================================================")
-    print("Note: Please ensure Ollama is running in the background.\n")
+    console.print(Panel.fit(
+        "[bold cyan]Code-Sentinel[/bold cyan] - [dim]Local Code Intelligence[/dim]", 
+        border_style="cyan"
+    ))
+    console.print("[dim]Note: Please ensure Ollama is running in the background.[/dim]\n")
     
-    print("Checking Ollama status...")
-    bootstrap_dependencies()
+    with console.status("[magenta]Checking Ollama status...[/magenta]", spinner="dots"):
+        if not is_ollama_running():
+            # bootstrap_dependencies()
+            console.print("[bold red]✖ Error: Ollama is not responding.[/bold red] Attempting to Start Ollama...")
+            sys.exit(1)
+    console.print("[bold green]✔ Ollama is running.[/bold green]\n")
     
     app_dir = get_app_dir()
     env_path = get_env_path()
-    
-    # Load existing .env if present
     load_dotenv(dotenv_path=env_path)
 
     while True:
         current_repo = os.environ.get("SOURCE_DIR")
         
         if current_repo:
-            print(f"Current repository: {current_repo}")
-            repo_path = input("Enter the absolute path to your codebase (Press Enter to keep current, or 'q' to quit): ").strip()
-            if not repo_path:
-                repo_path = current_repo
+            console.print(f"[cyan]Current repository:[/cyan] {current_repo}")
+            repo_path = Prompt.ask("[bold yellow]Enter absolute path to codebase[/bold yellow] (Press Enter to keep current, or 'q' to quit)", default=current_repo)
         else:
-            repo_path = input("Enter the absolute path to your codebase (or 'q' to quit): ").strip()
+            repo_path = Prompt.ask("[bold yellow]Enter absolute path to codebase[/bold yellow] (or 'q' to quit)")
         
         if repo_path.lower() in ('q', 'quit', 'exit'):
-            print("Exiting Code-Sentinel.")
+            console.print("[red]Exiting Code-Sentinel.[/red]")
             sys.exit(0)
             
         repo_path = repo_path.strip('"').strip("'")
 
         if not os.path.exists(repo_path):
-            print(f"Error: The path '{repo_path}' does not exist. Please try again.\n")
+            console.print(f"[bold red]✖ Error:[/bold red] The path '{repo_path}' does not exist.\n")
             continue
             
-        # Check if environment is already configured for THIS repo
         is_configured = (
             os.environ.get("SOURCE_DIR") == repo_path and
             os.environ.get("PERSIST_DIRECTORY") and 
@@ -53,75 +58,69 @@ def main():
         )
 
         if not is_configured:
-            print("Setting up environment...")
-            if not os.path.exists(env_path):
-                open(env_path, 'a').close()
+            with console.status("[cyan]Setting up environment...[/cyan]", spinner="arc"):
+                if not os.path.exists(env_path):
+                    open(env_path, 'a').close()
 
-            setup_environment(repo_path)      # sets all os.environ keys cleanly
+                bootstrap_dependencies()
+                setup_environment(repo_path)
 
-            # Write back to .env for persistence across restarts
-            from dotenv import set_key
-            for key in ["SOURCE_DIR", "DATA_DIR", "PERSIST_DIRECTORY",
-                        "SYMBOL_DB_PATH", "DEP_GRAPH_PATH", "DOCS_DIR"]:
-                set_key(env_path, key, os.environ[key])
+                from dotenv import set_key
+                for key in ["SOURCE_DIR", "DATA_DIR", "PERSIST_DIRECTORY", "SYMBOL_DB_PATH", "DEP_GRAPH_PATH", "DOCS_DIR"]:
+                    set_key(env_path, key, os.environ[key])
 
-            load_dotenv(dotenv_path=env_path, override=True)
-            
+                load_dotenv(dotenv_path=env_path, override=True)
         else:
-            print("Environment and dependencies are already set up for this repository.")
+            console.print("[green]✔ Environment already configured for this repository.[/green]")
 
-        # Check for existing indexes
         vector_dir = os.environ.get("PERSIST_DIRECTORY")
         symbol_db = os.environ.get("SYMBOL_DB_PATH")
         dep_graph = os.environ.get("DEP_GRAPH_PATH")
 
         needs_ingestion = True
         if os.path.exists(vector_dir) and os.path.exists(symbol_db) and os.path.exists(dep_graph):
-            print("\n[INFO] Found existing vector store, dependency graph, and symbol index in the local directory.")
-            choice = input("Do you want to re-index the repository? (y/N): ").strip().lower()
+            console.print("\n[cyan]ℹ Found existing indexes in the local directory.[/cyan]")
+            choice = Prompt.ask("Do you want to re-index the repository?", choices=["y", "n"], default="n")
             if choice != 'y':
                 needs_ingestion = False
 
         if needs_ingestion:
-            print("\nStarting repository ingestion...")
+            console.print("\n[bold cyan]Starting repository ingestion...[/bold cyan]")
             from ingest.run_ingest import run_ingest
             try:
                 run_ingest(repo_path, clean=True)
-                print("\nIngestion complete!")
+                console.print("\n[bold green]✔ Ingestion complete![/bold green]")
             except Exception as e:
-                print(f"\nIngestion failed: {e}")
-                print("Returning to repository selection...\n")
+                console.print(f"\n[bold red]✖ Ingestion failed:[/bold red] {e}")
                 continue
         else:
-            print("\nSkipping ingestion. Using existing indexes.")
+            console.print("\n[dim]Skipping ingestion. Using existing indexes.[/dim]")
             
-        # Inner loop for the Sentinel CLI
         while True:
-            print("\n=======================================")
-            print("[1] Start Code-Sentinel CLI")
-            print("[2] Change Repository")
-            print("[3] Exit Application")
-            print("=======================================")
-            choice = input("Choice: ").strip()
+            menu = Table(show_header=False, box=None)
+            menu.add_row("[bold cyan][1][/bold cyan]", "Start Code-Sentinel CLI")
+            menu.add_row("[bold cyan][2][/bold cyan]", "Change Repository")
+            menu.add_row("[bold red][3][/bold red]", "Exit Application")
+            console.print(Panel(menu, title="Startup Menu", border_style="blue", expand=False))
+            
+            choice = Prompt.ask("[bold yellow]Choice[/bold yellow]", choices=["1", "2", "3"])
             
             if choice == "1":
                 from main import main as inititate_sentinel
                 try:
                     inititate_sentinel()
                 except Exception as e:
-                    print(f"An error occurred while running the CLI: {e}")
+                    console.print(f"[bold red]✖ Error running CLI:[/bold red] {e}")
             elif choice == "2":
-                print("\nChanging repository...")
+                console.print("\n[cyan]Changing repository...[/cyan]")
                 break 
             elif choice == "3":
-                print("Exiting Code-Sentinel.")
+                console.print("[red]Exiting Code-Sentinel.[/red]")
                 sys.exit(0)
-            else:
-                print("Invalid choice. Please enter 1, 2, or 3.")
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"\nFatal error: {e}")
+        console.print(f"\n[bold red]Fatal error:[/bold red] {e}")
         input("Press Enter to close...")

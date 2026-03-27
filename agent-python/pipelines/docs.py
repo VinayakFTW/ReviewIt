@@ -25,7 +25,9 @@ from langchain_ollama import ChatOllama
 from ingest.ast_parser import parse_file, FileAnalysis, FunctionSymbol, ClassSymbol
 from retrieval.hybrid_retriever import HybridRetriever
 from core.model_manager import ORCHESTRATOR_MODEL
-
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
+from rich import print
 
 # ---------------------------------------------------------------------------
 # Prompt templates
@@ -153,29 +155,47 @@ class DocsPipeline:
     # ------------------------------------------------------------------
 
     def _document_files(self, filepaths: List[str], update_architecture: bool):
-        for filepath in filepaths:
-            print(f"  [Docs] Documenting {os.path.basename(filepath)}...")
-            analysis = parse_file(filepath)
-            if analysis.parse_error:
-                print(f"    Skipping: {analysis.parse_error}")
-                continue
+        console = Console()
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            
+            task = progress.add_task("[cyan]Documenting Codebase...", total=len(filepaths))
 
-            # Stage 1: Function-level docs
-            fn_docs = self._document_functions(analysis)
+            for filepath in filepaths:
+                file_name = os.path.basename(filepath)
+                progress.update(task, description=f"[cyan]Documenting {file_name}...")
+                
+                analysis = parse_file(filepath)
+                if analysis.parse_error:
+                    progress.console.print(f"  [red]✖[/red] Skipping {file_name}: {analysis.parse_error}")
+                    progress.advance(task)
+                    continue
+                
+                #Function level docs
+                fn_docs = self._document_functions(analysis)
 
-            # Stage 2: Module-level summary
-            module_summary = self._document_module(analysis, fn_docs)
+                #Module level docs
+                module_summary = self._document_module(analysis, fn_docs)
 
-            # Cache the summary
-            self._summary_cache[filepath] = module_summary
-            self._save_cache()
+                # Update cache and write docs for this module
+                self._summary_cache[filepath] = module_summary
+                self._save_cache()
+                self._write_module_doc(filepath, analysis, fn_docs, module_summary)
+                
+                progress.advance(task)
 
-            # Write module doc file
-            self._write_module_doc(filepath, analysis, fn_docs, module_summary)
-
-        # Stage 3: Architecture overview (if structure changed)
+        # update the architecture overview if any files were changed (or if it was a full run)
         if update_architecture:
-            self._update_architecture_doc()
+            with console.status("[magenta]Regenerating architecture overview...[/magenta]"):
+                self._update_architecture_doc()
+            console.print("  [green]✔[/green] Architecture updated.")
 
     def _document_functions(self, analysis: FileAnalysis) -> Dict[str, str]:
         """Generate docstrings for functions that lack them."""

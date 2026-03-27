@@ -9,5 +9,6 @@ pyinstaller cli.py --name CodeSentinel --onedir \
   --collect-all sentence_transformers \
   --collect-all tokenizers \
   --collect-all huggingface_hub \
+  --collect-all rich \
   --add-data "offline_model;offline_model" \
   --clean

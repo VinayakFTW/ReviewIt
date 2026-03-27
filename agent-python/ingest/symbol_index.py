@@ -16,7 +16,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Iterator, List, Optional
-
+from rich import print
 from ingest.ast_parser import FileAnalysis, FunctionSymbol, ClassSymbol
 
 

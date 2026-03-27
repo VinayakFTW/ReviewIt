@@ -17,7 +17,7 @@ Used by the hybrid retriever to expand context beyond a single matched file.
 import os
 from collections import defaultdict
 from typing import Dict, List, Optional, Set, Tuple
-
+from rich import print
 import networkx as nx
 
 from ingest.ast_parser import FileAnalysis, FunctionSymbol, ImportEdge

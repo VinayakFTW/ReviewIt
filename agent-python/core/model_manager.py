@@ -1,6 +1,7 @@
 import requests
 import time
-
+from rich import print
+    
 OLLAMA_BASE_URL = "http://localhost:11434"
 
 # The small worker model — qwen2.5-coder:0.5b is ~400MB, fast, code-aware.
@@ -17,7 +18,7 @@ def unload_model(model_name: str) -> bool:
     try:
         resp = requests.post(
             f"{OLLAMA_BASE_URL}/api/generate",
-            json={"model": model_name, "keep_alive": 0, "prompt": ""},
+            json={"model": model_name, "keep_alive": 0, "prompt": ".", "stream": False},
             timeout=15,
         )
         if resp.status_code == 200:

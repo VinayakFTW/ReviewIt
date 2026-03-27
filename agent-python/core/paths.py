@@ -9,7 +9,7 @@ Key rule: never use __file__ for writable paths.
 """
 import os
 import sys
-
+from rich import print
 
 def get_app_dir() -> str:
     """

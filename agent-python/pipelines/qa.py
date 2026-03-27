@@ -17,6 +17,11 @@ from langchain_ollama import ChatOllama
 from retrieval.hybrid_retriever import HybridRetriever, CodeContext
 from core.model_manager import ORCHESTRATOR_MODEL
 from typing import List
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.prompt import Prompt
+from rich import print
 
 _QA_SYSTEM_PROMPT = """You are a senior software engineer who has read every line of this codebase.
 Answer the user's question using ONLY the provided code context.
@@ -38,23 +43,19 @@ class QAPipeline:
             temperature=0.1,
             keep_alive="10m",
         )
+        self.console = Console()
 
     def ask(self, question: str, verbose: bool = True) -> str:
-        if verbose:
-            print(f"\n[Q&A] Retrieving context for: '{question}'")
-
-        contexts = self.retriever.retrieve(
-            query=question,
-            vector_k=10,
-            dep_hops=1,
-            max_total=20,
-        )
+        with self.console.status(f"[cyan]Retrieving context for: '{question}'...[/cyan]", spinner="dots"):
+            contexts = self.retriever.retrieve(
+                query=question, vector_k=10, dep_hops=1, max_total=20,
+            )
 
         if not contexts:
             return "No relevant code found in the indexed codebase."
 
         if verbose:
-            print(f"[Q&A] Using {len(contexts)} symbol(s) as context.")
+            self.console.print(f"  [green]✔[/green] Found [bold]{len(contexts)}[/bold] relevant symbols.")
 
         formatted_ctx = self.retriever.format_context(contexts, max_chars=20_000)
 
@@ -63,14 +64,15 @@ class QAPipeline:
             ("human", f"### QUESTION\n{question}\n\n### CODE CONTEXT\n{formatted_ctx}"),
         ]
 
-        answer = self.llm.invoke(messages).content.strip()
+        with self.console.status("[magenta]14B Orchestrator is generating the answer...[/magenta]", spinner="bouncingBar"):
+            answer = self.llm.invoke(messages).content.strip()
         return answer
 
     def interactive_loop(self):
-        print("\n[Q&A Mode] Ask anything about the codebase. Type 'back' to return.\n")
+        self.console.print(Panel("[bold cyan]Q&A Mode[/bold cyan]\nAsk anything about the codebase. Type 'back', 'exit', or 'quit' to return.", border_style="cyan"))
         while True:
             try:
-                question = input("Question: ").strip()
+                question = Prompt.ask("\n[bold yellow]Question[/bold yellow]")
             except (KeyboardInterrupt, EOFError):
                 break
             if not question:
@@ -78,4 +80,5 @@ class QAPipeline:
             if question.lower() in ("back", "exit", "quit"):
                 break
             answer = self.ask(question)
-            print(f"\n{answer}\n")
+            self.console.print("\n")
+            self.console.print(Panel(Markdown(answer), title="[bold green]Sentinel Response[/bold green]", border_style="green"))
