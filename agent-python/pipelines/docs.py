@@ -96,10 +96,12 @@ class DocsPipeline:
         retriever: HybridRetriever,
         source_dir: str,
         docs_dir: str = "docs",
+        output_callback=None,
     ):
         self.retriever = retriever
         self.source_dir = source_dir
         self.docs_dir = docs_dir
+        self.out = output_callback or print
         self.llm = ChatOllama(
             model=ORCHESTRATOR_MODEL,
             temperature=0.15,
@@ -119,19 +121,19 @@ class DocsPipeline:
         Detect changed files and update only their documentation.
         Called by git post-push hook.
         """
-        print(f"\n[Docs] Detecting changes since '{since}'...")
+        self.out(f"\n[Docs] Detecting changes since '{since}'...")
         changed = detect_changed_files(self.source_dir, since=since)
 
         if changed is None:
-            print("[Docs] Not a git repo or gitpython not installed. Falling back to full run.")
+            self.out("[Docs] Not a git repo or gitpython not installed. Falling back to full run.")
             self.run_full()
             return
 
         if not changed:
-            print("[Docs] No Python files changed. Nothing to document.")
+            self.out("[Docs] No Python files changed. Nothing to document.")
             return
 
-        print(f"[Docs] {len(changed)} file(s) changed: {[os.path.basename(f) for f in changed]}")
+        self.out(f"[Docs] {len(changed)} file(s) changed: {[os.path.basename(f) for f in changed]}")
         self._document_files(list(changed), update_architecture=True)
 
     def run_full(self) -> None:
@@ -139,13 +141,22 @@ class DocsPipeline:
         Document the entire codebase from scratch.
         Skips files whose summary is already cached.
         """
-        print("\n[Docs] Full documentation run...")
+        self.out("\n[Docs] Full documentation run...")
         all_files = list(Path(self.source_dir).glob("**/*.py"))
         all_files = [
             str(f) for f in all_files
             if not any(p in f.parts for p in (".venv", "venv", "__pycache__", "site-packages","dist","build"))
         ]
-        print(f"[Docs] {len(all_files)} Python files to document.")
+        current_files_set = set(all_files)
+        stale_keys = [k for k in self._summary_cache.keys() if k not in current_files_set]
+        if stale_keys:
+            self.out(f"  [Docs] Pruning {len(stale_keys)} deleted files from cache...")
+            for k in stale_keys:
+                del self._summary_cache[k]
+                self._remove_module_doc(k)
+            self._save_cache()
+
+        self.out(f"[Docs] {len(all_files)} Python files to document.")
         self._document_files(all_files, update_architecture=True)
 
     # ------------------------------------------------------------------
@@ -154,10 +165,19 @@ class DocsPipeline:
 
     def _document_files(self, filepaths: List[str], update_architecture: bool):
         for filepath in filepaths:
-            print(f"  [Docs] Documenting {os.path.basename(filepath)}...")
+            self.out(f"  [Docs] Documenting {os.path.basename(filepath)}...")
+
+            if not os.path.exists(filepath):
+                self.out(f"    File deleted from codebase. Purging from docs.")
+                if filepath in self._summary_cache:
+                    del self._summary_cache[filepath]
+                    self._save_cache()
+                self._remove_module_doc(filepath)
+                continue
+
             analysis = parse_file(filepath)
             if analysis.parse_error:
-                print(f"    Skipping: {analysis.parse_error}")
+                self.out(f"    Skipping: {analysis.parse_error}")
                 continue
 
             # Stage 1: Function-level docs
@@ -193,7 +213,7 @@ class DocsPipeline:
                 doc = self.llm.invoke([("human", prompt)]).content.strip()
                 fn_docs[fn.qualified_name] = doc
             except Exception as e:
-                print(f"    [Docs] Could not document {fn.qualified_name}: {e}")
+                self.out(f"    [Docs] Could not document {fn.qualified_name}: {e}")
                 fn_docs[fn.qualified_name] = ""
         return fn_docs
 
@@ -223,7 +243,7 @@ class DocsPipeline:
         """Regenerate top-level architecture.md from all cached module summaries."""
         if not self._summary_cache:
             return
-        print("\n[Docs] Updating architecture overview...")
+        self.out("\n[Docs] Updating architecture overview...")
 
         summaries_block = "\n\n".join(
             f"### {os.path.basename(fp)}\n{summary}"
@@ -238,7 +258,7 @@ class DocsPipeline:
         arch_path = os.path.join(self.docs_dir, "architecture.md")
         with open(arch_path, "w", encoding="utf-8") as f:
             f.write(arch_doc)
-        print(f"  [Docs] Saved → {arch_path}")
+        self.out(f"  [Docs] Saved → {arch_path}")
 
     def _write_module_doc(
         self,
@@ -285,11 +305,18 @@ class DocsPipeline:
 
         with open(out_path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
-        print(f"    Saved → {out_path}")
+        self.out(f"    Saved → {out_path}")
 
     # ------------------------------------------------------------------
     # Cache helpers
     # ------------------------------------------------------------------
+    def _remove_module_doc(self, filepath: str) -> None:
+        """Deletes the markdown file for a module that was removed."""
+        module_name = Path(filepath).stem
+        out_path = os.path.join(self.docs_dir, f"{module_name}.md")
+        if os.path.exists(out_path):
+            os.remove(out_path)
+            self.out(f"    Removed obsolete doc → {out_path}")
 
     def _load_cache(self) -> Dict[str, str]:
         if os.path.exists(self._summary_cache_path):

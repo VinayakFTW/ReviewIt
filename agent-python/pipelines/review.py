@@ -108,13 +108,15 @@ class ReviewPipeline:
         symbol_index: SymbolIndex,
         source_dir: str,
         max_workers: int = 10,
-        output_dir: str | None = None
+        output_dir: str | None = None,
+        output_callback=None
     ):
         self.output_dir = output_dir or source_dir
         self.retriever = retriever
         self.symbol_index = symbol_index
         self.source_dir = source_dir
         self.max_workers = max_workers
+        self.out = output_callback or print
         self.llm = ChatOllama(
             model=ORCHESTRATOR_MODEL,
             temperature=0.1,
@@ -122,25 +124,23 @@ class ReviewPipeline:
         )
 
     def run(self, user_request: str = "Full codebase audit") -> Tuple[str, str]:
-        print(f"\n{'─'*55}")
-        print(f" Code Review Pipeline — scope: {user_request}")
-        print(f"{'─'*55}")
+        self.out(f"Code Review Pipeline — scope: {user_request}")
 
         # ------------------------------------------------------------------
         # Phase 1: Static analysis (fast, no LLM)
         # ------------------------------------------------------------------
-        print("\n[Phase 1/3] Running static analysis...")
+        self.out("[Phase 1/3] Running static analysis...")
         analyses = parse_directory(self.source_dir)
         static_findings: List[StaticFinding] = []
         for analysis in analyses:
             static_findings.extend(analysis.static_findings)
-        print(f"  Static analysis: {len(static_findings)} finding(s) across "
+        self.out(f"  Static analysis: {len(static_findings)} finding(s) across "
               f"{len(analyses)} files.")
 
         # ------------------------------------------------------------------
         # Phase 2: 10 parallel semantic workers
         # ------------------------------------------------------------------
-        print(f"\n[Phase 2/3] Launching {len(SPECIALIZATIONS)} semantic workers...")
+        self.out(f"\n[Phase 2/3] Launching {len(SPECIALIZATIONS)} semantic workers...")
         semantic_findings: List[Finding] = []
         safe_workers = 1
         total_workers = len(SPECIALIZATIONS)
@@ -161,27 +161,18 @@ class ReviewPipeline:
                     try:
                         findings = future.result()
                         semantic_findings.extend(findings)
-                        # Print successful completion progress
+                        
                         short_spec = spec.split('(')[0].strip()
-                        print(f"  [Progress] {completed}/{total_workers} workers done. (Finished: {short_spec})")
+                        self.out(f"  [Progress] {completed}/{total_workers} workers done. (Finished: {short_spec})")
                     except Exception as e:
                         short_spec = spec.split('(')[0].strip()
-                        print(f"  [Progress] {completed}/{total_workers} workers done. (Error in {short_spec}: {e})")
+                        self.out(f"  [Progress] {completed}/{total_workers} workers done. (Error in {short_spec}: {e})")
             except KeyboardInterrupt:
-                print("\n[!] Force quitting: Review interrupted by user. Cancelling pending workers...")
+                self.out("\n[!] Force quitting: Review interrupted by user. Cancelling pending workers...")
                 pool.shutdown(wait=False, cancel_futures=True)
-                raise  #
+                raise
 
-
-            # for future in as_completed(futures):
-            #     try:
-            #         findings = future.result()
-            #         semantic_findings.extend(findings)
-            #     except Exception as e:
-            #         spec = futures[future]
-            #         print(f"  [Worker] {spec[:30]}... error: {e}")
-
-        print(f"  Semantic analysis: {len(semantic_findings)} finding(s).")
+        self.out(f"  Semantic analysis: {len(semantic_findings)} finding(s).")
 
         # Unload 0.5b model before loading 14B for synthesis
         unload_workers()
@@ -189,7 +180,7 @@ class ReviewPipeline:
         # ------------------------------------------------------------------
         # Phase 3: 14B synthesis
         # ------------------------------------------------------------------
-        print("\n[Phase 3/3] Synthesising report with 14B model...")
+        self.out("\n[Phase 3/3] Synthesising report with 14B model...")
         review_md, docs_md = self._synthesise(
             user_request, static_findings, semantic_findings
         )
@@ -197,9 +188,7 @@ class ReviewPipeline:
         self._save("review.md", review_md)
         # self._save("documentation.md", docs_md)
 
-        print(f"\n{'─'*55}")
-        print(" Review complete → review.md")
-        print(f"{'─'*55}\n")
+        self.out(" Review complete → review.md")
         return review_md, docs_md
 
     # ------------------------------------------------------------------
@@ -233,7 +222,7 @@ class ReviewPipeline:
         try:
             raw = self.llm.invoke([("human", prompt)]).content.strip()
         except Exception as e:
-            print(f"[Review] Synthesis error: {e}")
+            self.out(f"[Review] Synthesis error: {e}")
             return f"# Error\n{e}", ""
 
         review = self._extract_tag(raw, "REVIEW") or "# No review generated."
@@ -303,4 +292,4 @@ class ReviewPipeline:
             os.makedirs(self.output_dir, exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
-            print(f"  Saved → {path}")
+            self.out(f"  Saved → {path}")

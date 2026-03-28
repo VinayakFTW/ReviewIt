@@ -31,8 +31,9 @@ class QAPipeline:
     Designed for interactive use — single question, single answer.
     """
 
-    def __init__(self, retriever: HybridRetriever):
+    def __init__(self, retriever: HybridRetriever, output_callback=None):
         self.retriever = retriever
+        self.out = output_callback or print
         self.llm = ChatOllama(
             model=ORCHESTRATOR_MODEL,
             temperature=0.1,
@@ -41,7 +42,7 @@ class QAPipeline:
 
     def ask(self, question: str, verbose: bool = True) -> str:
         if verbose:
-            print(f"\n[Q&A] Retrieving context for: '{question}'")
+            self.out(f"\n[Q&A] Retrieving context for: '{question}'")
 
         contexts = self.retriever.retrieve(
             query=question,
@@ -54,7 +55,7 @@ class QAPipeline:
             return "No relevant code found in the indexed codebase."
 
         if verbose:
-            print(f"[Q&A] Using {len(contexts)} symbol(s) as context.")
+            self.out(f"[Q&A] Using {len(contexts)} symbol(s) as context.")
 
         formatted_ctx = self.retriever.format_context(contexts, max_chars=20_000)
 
@@ -67,7 +68,7 @@ class QAPipeline:
         return answer
 
     def interactive_loop(self):
-        print("\n[Q&A Mode] Ask anything about the codebase. Type 'back' to return.\n")
+        self.out("\n[Q&A Mode] Ask anything about the codebase. Type 'back' to return.\n")
         while True:
             try:
                 question = input("Question: ").strip()
@@ -78,4 +79,4 @@ class QAPipeline:
             if question.lower() in ("back", "exit", "quit"):
                 break
             answer = self.ask(question)
-            print(f"\n{answer}\n")
+            self.out(f"\n{answer}\n")

@@ -21,14 +21,6 @@ from core.paths import (
 )
 load_dotenv(dotenv_path=get_env_path())
 
-BANNER = """
-========================================================
-|              Code-Sentinel  v1  (Hybrid)             |
-|  AST + DepGraph + SymbolIndex + Vector + 10 Workers  |
-========================================================
-"""
-
-
 def load_shared_resources():
     VECTOR_DIR = get_persist_dir()
     GRAPH_PATH = get_dep_graph()
@@ -57,75 +49,3 @@ def load_shared_resources():
     )
     print("[Init] Hybrid retriever ready.\n")
     return retriever
-
-
-def main():
-
-    SOURCE_DIR = get_source_dir()
-    VECTOR_DIR = get_persist_dir()
-    GRAPH_PATH = get_dep_graph()
-    SYMBOL_DB  = get_symbol_db()
-    DOCS_DIR   = get_docs_dir(SOURCE_DIR)
-
-    print(BANNER)
-
-    if not check_ollama_running():
-        print("ERROR: Ollama is not running. Start with: ollama serve")
-        sys.exit(1)
-
-    if not os.path.exists(VECTOR_DIR):
-        print(f"ERROR: No vector store. Run:\n  python -m ingest.run_ingest --source {SOURCE_DIR}")
-        sys.exit(1)
-
-    retriever = load_shared_resources()
-
-    qa_pipeline     = QAPipeline(retriever)
-    review_pipeline = ReviewPipeline(
-        retriever=retriever, symbol_index=retriever.si, source_dir=SOURCE_DIR)
-    docs_pipeline   = DocsPipeline(
-        retriever=retriever, source_dir=SOURCE_DIR, docs_dir=DOCS_DIR)
-
-    # warmup_model(ORCHESTRATOR_MODEL, keep_alive_seconds=1800)
-
-    while True:
-        print("=======================================")
-        print("|  [1] Q&A        Ask about the code  |")
-        print("|  [2] Review     Full codebase audit |")
-        print("|  [3] Docs       Update documentation|")
-        print("|  [4] Re-index   Re-run ingest       |")
-        print("|  [q] Quit                           |")
-        print("=======================================")
-
-        try:
-            choice = input("Choice: ").strip().lower()
-        except (KeyboardInterrupt, EOFError):
-            print("\nExiting.")
-            break
-
-        if choice in ("q", "quit", "exit"):
-            break
-        elif choice == "1":
-            qa_pipeline.interactive_loop()
-        elif choice == "2":
-            scope = input("Scope (Enter = full audit): ").strip() or "Full codebase audit"
-            review_pipeline.run(user_request=scope)
-        elif choice == "3":
-            mode = input("Full [f] or incremental [i]? ").strip().lower()
-            if mode == "f":
-                docs_pipeline.run_full()
-            else:
-                since = input("Since ref (default HEAD~1): ").strip() or "HEAD~1"
-                docs_pipeline.run_incremental(since=since)
-        elif choice == "4":
-            src = input(f"Source dir (default {SOURCE_DIR}): ").strip() or SOURCE_DIR
-            from ingest.run_ingest import run_ingest
-            run_ingest(src, clean=True)
-            retriever = load_shared_resources()
-            qa_pipeline.retriever = retriever
-            review_pipeline.retriever = retriever
-            docs_pipeline.retriever = retriever
-        else:
-            print("Invalid choice.")
-
-if __name__ == "__main__":
-    main()

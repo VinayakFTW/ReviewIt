@@ -1,0 +1,100 @@
+/* agent-python/app.tcss */
+
+Screen {
+    background: $surface-darken-1;
+}
+
+
+/* --- Welcome Screen Styles --- */
+#welcome-container {
+    align: center middle;
+    height: 100%;
+}
+
+#welcome-dialog {
+    width: 60;
+    height: auto;
+    padding: 2 4;
+    background: $surface;
+    border: round $accent;
+    content-align: center middle;
+}
+
+#welcome-title {
+    text-align: center;
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#welcome-text {
+    text-align: center;
+    margin-bottom: 2;
+}
+
+#button-container {
+    layout: horizontal;
+    align: center middle;
+    height: auto;
+}
+
+Button {
+    margin: 0 1;
+}
+
+/* --- Chat Screen Styles --- */
+#chat-container {
+    height: 1fr;
+    margin-bottom: 1;
+    border: blank;
+    overflow-y: auto;
+}
+
+.message-user {
+    background: $primary-background;
+    color: $text;
+    margin: 1 2;
+    padding: 0 1; /* Adjusted padding since we added a border */
+    content-align: right middle;
+    border: round $primary-background; /* This gives it rounded terminal corners */
+}
+
+.message-agent {
+    margin: 1 2;
+    padding: 0 1;
+    border: round $surface;
+    border-left: vkey $accent; /* Keeps the nice accent line on the left */
+    background: $surface;
+}
+
+#input-container {
+    height: auto;
+    dock: bottom;
+    padding: 1 2;
+    background: $surface-darken-2;
+}
+
+Input {
+    border: round $accent;
+    width: 100%;
+}
+
+/* --- Repo Selection Screen Styles --- */
+#repo-dialog {
+    width: 60;
+    height: auto;
+    padding: 2 4;
+    background: $surface;
+    border: round $accent;
+}
+
+#repo-input {
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+.error-text {
+    color: $error;
+    text-align: center;
+    margin-bottom: 1;
+}

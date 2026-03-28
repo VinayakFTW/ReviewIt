@@ -12,3 +12,5 @@ networkx
 optimum
 gitpython
 python-dotenv
+InquirerPy
+textual
