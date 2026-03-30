@@ -1,70 +1,57 @@
-import requests
-import time
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-OLLAMA_BASE_URL = "http://localhost:11434"
+# Global references to keep the model in memory
+_worker_model = None
+_worker_tokenizer = None
+_orchestrator_model = None
+_orchestrator_tokenizer = None
 
-# The small worker model — qwen2.5-coder:0.5b is ~400MB, fast, code-aware.
-# Swap for "smollm2:360m" if you want pure 300M, but it's weaker on code.
-WORKER_MODEL = "qwen2.5-coder:0.5b"
-ORCHESTRATOR_MODEL = "qwen2.5-coder:14b"
-
-
-def unload_model(model_name: str) -> bool:
-    """
-    Sends a keep_alive=0 request to Ollama to immediately evict the model from VRAM.
-    Call this before starting the 14B orchestrator to reclaim memory.
-    """
-    try:
-        resp = requests.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            json={"model": model_name, "keep_alive": 0, "prompt": ""},
-            timeout=15,
+def load_worker_model():
+    global _worker_model, _worker_tokenizer
+    if _worker_model is None:
+        print("[ModelManager] Loading qwen2.5-coder:0.5b into PyTorch...")
+        _worker_tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-0.5B-Instruct")
+        _worker_model = AutoModelForCausalLM.from_pretrained(
+            "Qwen/Qwen2.5-Coder-0.5B-Instruct",
+            device_map="auto",
+            torch_dtype=torch.float16,
         )
-        if resp.status_code == 200:
-            print(f"[ModelManager] Unloaded '{model_name}' from VRAM.")
-            return True
-        else:
-            print(f"[ModelManager] Warning: unload returned {resp.status_code}")
-            return False
-    except requests.exceptions.RequestException as e:
-        print(f"[ModelManager] Could not unload '{model_name}': {e}")
-        return False
-
+    return _worker_model, _worker_tokenizer
 
 def unload_workers():
-    """Convenience wrapper — unloads the shared worker model."""
+    global _worker_model, _worker_tokenizer
     print("[ModelManager] Evicting worker model from VRAM...")
-    unload_model(WORKER_MODEL)
-    # Brief pause to let Ollama finish the eviction before 14B loads.
-    time.sleep(1.5)
+    del _worker_model
+    del _worker_tokenizer
+    _worker_model = None
+    _worker_tokenizer = None
+    torch.cuda.empty_cache()
+    print("[ModelManager] Done.")
+    return True
 
-
-def warmup_model(model_name: str, keep_alive_seconds: int = 600):
-    """
-    Pre-loads a model into Ollama so the first real request isn't cold.
-    Optional but reduces first-token latency.
-    """
-    try:
-        print(f"[ModelManager] Warming up '{model_name}'...")
-        requests.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            json={
-                "model": model_name,
-                "keep_alive": keep_alive_seconds,
-                "prompt": ".",
-                "stream": False,
-            },
-            timeout=120,
+def load_orchestrator_model():
+    global _orchestrator_model, _orchestrator_tokenizer
+    if _orchestrator_model is None:
+        print("[ModelManager] Loading qwen2.5-coder:14b into PyTorch...")
+        # Make sure workers are unloaded to free VRAM!
+        unload_workers() 
+        
+        _orchestrator_tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-14B-Instruct")
+        _orchestrator_model = AutoModelForCausalLM.from_pretrained(
+            "Qwen/Qwen2.5-Coder-14B-Instruct",
+            device_map="auto",
+            torch_dtype=torch.float16,
         )
-        print(f"[ModelManager] '{model_name}' ready.")
-    except requests.exceptions.RequestException as e:
-        print(f"[ModelManager] Warning: warmup failed for '{model_name}': {e}")
+    return _orchestrator_model, _orchestrator_tokenizer
 
-
-def check_ollama_running() -> bool:
-    """Quick health check — returns False if Ollama isn't reachable."""
-    try:
-        resp = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
-        return resp.status_code == 200
-    except requests.exceptions.RequestException:
-        return False
+def unload_orchestrator():
+    global _orchestrator_model, _orchestrator_tokenizer
+    print("[ModelManager] Evicting 14B model from VRAM...")
+    del _orchestrator_model
+    del _orchestrator_tokenizer
+    _orchestrator_model = None
+    _orchestrator_tokenizer = None
+    torch.cuda.empty_cache()
+    print("[ModelManager] Done.")
+    return True

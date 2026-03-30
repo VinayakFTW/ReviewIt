@@ -7,10 +7,13 @@ This gives it dep-graph-expanded context instead of pure similarity hits.
 import threading
 from dataclasses import dataclass
 from typing import List, Optional
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from langchain_ollama import ChatOllama
 
-from core.model_manager import WORKER_MODEL
+from core.model_manager import WORKER_MODEL,load_worker_model
+from TurboQ import TurboQuantCache
 
 SPECIALIZATIONS = [
     "security vulnerabilities (SQL injection, XSS, hardcoded secrets, broken auth, path traversal)",
@@ -69,7 +72,25 @@ class WorkerAgent:
         self.max_rounds = max_rounds
         self.llm = ChatOllama(model=WORKER_MODEL, temperature=0.0, keep_alive="5m")
         self.db_lock = db_lock or threading.Lock()
-
+        self.model, self.tokenizer = load_worker_model()
+    
+    def _invoke_llm(self, prompt: str) -> str:
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+        
+        # Initialize the TurboQuant cache for this specific generation request
+        tq_cache = TurboQuantCache(self.model.config)
+        
+        outputs = self.model.generate(
+            **inputs,
+            max_new_tokens=512,
+            past_key_values=tq_cache, # Inject the compression algorithm
+            use_cache=True,
+            temperature=0.0
+        )
+        
+        response = self.tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
+        return response
+    
     def run(self, user_request: str) -> List[Finding]:
         print(f"  [Worker:{self.specialization}] Starting...")
         all_findings: List[Finding] = []
@@ -114,7 +135,7 @@ class WorkerAgent:
         prompt = _SEARCH_QUERY_PROMPT.format(
             specialization=self.specialization, user_request=user_request)
         try:
-            response = self.llm.invoke([("human", prompt)]).content.strip()
+            response = self._invoke_llm([("human", prompt)]).strip()
             queries = [q.strip() for q in response.split("\n") if q.strip()]
             return queries[:3] or [self.specialization.split("(")[0].strip()]
         except Exception:
@@ -131,7 +152,7 @@ class WorkerAgent:
         prompt = _ANALYSIS_PROMPT.format(
             specialization=self.specialization, snippets=snippets)
         try:
-            raw = self.llm.invoke([("human", prompt)]).content.strip()
+            raw = self._invoke_llm(prompt).strip()
         except Exception as e:
             print(f"  [Worker:{self._short()}] Error: {e}")
             return []
