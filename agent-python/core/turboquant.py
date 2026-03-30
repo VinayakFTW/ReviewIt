@@ -115,5 +115,19 @@ class TurboQuantCache(Cache):
         return self.key_cache[layer_idx][0].shape[-2]
         
     def get_max_length(self) -> int:
-        # Hugging Face internal safety check fallback
-        return 4096
+        #fallback
+        return 32768
+    
+    def clone(self):
+        """Creates a lightweight copy of the cache to reuse the prefix across different queries."""
+        import copy
+        new_cache = TurboQuantCache(self.config, self.compression_bits)
+        new_cache.rotation_matrix = self.rotation_matrix
+        new_cache.inverse_rotation = self.inverse_rotation
+        new_cache.head_dim = self.head_dim
+        
+        # Deepcopy the state dictionaries so appending new tokens doesn't mutate the base prefix
+        new_cache.key_cache = copy.deepcopy(self.key_cache)
+        new_cache.value_cache = copy.deepcopy(self.value_cache)
+        
+        return new_cache

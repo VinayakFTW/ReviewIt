@@ -26,13 +26,12 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Tuple
 
-from langchain_ollama import ChatOllama
-
 from ingest.ast_parser import StaticFinding, parse_directory
 from ingest.symbol_index import SymbolIndex
 from retrieval.hybrid_retriever import HybridRetriever
-from core.model_manager import ORCHESTRATOR_MODEL, unload_workers
+from core.model_manager import load_orchestrator_model, unload_workers
 from core.worker import WorkerAgent, Finding, SPECIALIZATIONS
+from core.inference import generate_with_turboquant,precompute_system_prefix
 
 
 # ---------------------------------------------------------------------------
@@ -81,15 +80,6 @@ CRITICAL INSTRUCTION: You MUST wrap your code review inside <REVIEW> tags and yo
 ## Known Tech Debt
 <!-- Items future maintainers must be aware of -->
 </DOCS>
-
-### STATIC ANALYSIS FINDINGS
-{static_findings}
-
-### SEMANTIC FINDINGS (from 10 specialist agents)
-{semantic_findings}
-
-### USER REQUEST / SCOPE
-{user_request}
 """
 
 
@@ -115,10 +105,11 @@ class ReviewPipeline:
         self.symbol_index = symbol_index
         self.source_dir = source_dir
         self.max_workers = max_workers
-        self.llm = ChatOllama(
-            model=ORCHESTRATOR_MODEL,
-            temperature=0.1,
-            keep_alive="10m",
+        model, tokenizer = load_orchestrator_model()
+        self.review_base_cache, _ = precompute_system_prefix(
+            _SYNTHESIS_PROMPT, 
+            model,
+            tokenizer
         )
 
     def run(self, user_request: str = "Full codebase audit") -> Tuple[str, str]:
@@ -170,16 +161,7 @@ class ReviewPipeline:
             except KeyboardInterrupt:
                 print("\n[!] Force quitting: Review interrupted by user. Cancelling pending workers...")
                 pool.shutdown(wait=False, cancel_futures=True)
-                raise  #
-
-
-            # for future in as_completed(futures):
-            #     try:
-            #         findings = future.result()
-            #         semantic_findings.extend(findings)
-            #     except Exception as e:
-            #         spec = futures[future]
-            #         print(f"  [Worker] {spec[:30]}... error: {e}")
+                raise
 
         print(f"  Semantic analysis: {len(semantic_findings)} finding(s).")
 
@@ -225,13 +207,22 @@ class ReviewPipeline:
         static_block = self._format_static(static_findings)
         semantic_block = self._format_semantic(semantic_findings)
 
-        prompt = _SYNTHESIS_PROMPT.format(
+        req_cache = self.review_base_cache.clone()
+
+        prompt = """### STATIC ANALYSIS FINDINGS
+{static_findings}
+
+### SEMANTIC FINDINGS (from 10 specialist agents)
+{semantic_findings}
+
+### USER REQUEST / SCOPE
+{user_request}""".format(
             static_findings=static_block,
             semantic_findings=semantic_block,
             user_request=user_request,
         )
         try:
-            raw = self.llm.invoke([("human", prompt)]).content.strip()
+            raw = generate_with_turboquant(prompt, base_cache=req_cache, model=self.model, tokenizer=self.tokenizer)
         except Exception as e:
             print(f"[Review] Synthesis error: {e}")
             return f"# Error\n{e}", ""

@@ -12,10 +12,7 @@ def main():
     print("========================================================")
     print("           Code-Sentinel - Code Review Assistant             ")
     print("========================================================")
-    print("Note: Please ensure Ollama is running in the background.\n")
     
-    print("Checking Ollama status...")
-    bootstrap_dependencies()
     
     app_dir = get_app_dir()
     env_path = get_env_path()

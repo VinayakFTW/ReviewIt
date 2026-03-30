@@ -80,13 +80,13 @@ def get_embedding_model() -> str:
     """
     # 1. Frozen exe — check the bundle first, always
     if getattr(sys, "frozen", False):
-        bundled = os.path.join(get_meipass_dir(), "offline_model")
+        bundled = os.path.join(get_meipass_dir(), "offline_model/jinaai_jina-code-embeddings-1.5b")
         if os.path.exists(bundled):
             print(f"[Paths] Using bundled offline model: {bundled}")
             return bundled
 
     # 2. Script / dev mode — check project root
-    local = os.path.join(get_app_dir(), "offline_model")
+    local = os.path.join(get_app_dir(), "offline_model/jinaai_jina-code-embeddings-1.5b")
     if os.path.exists(local):
         print(f"[Paths] Using local offline model: {local}")
         return local
@@ -100,6 +100,70 @@ def get_embedding_model() -> str:
     # 4. Hardcoded last resort
     print("[Paths] WARNING: No local model and no EMBEDDING_MODEL_NAME set. Using default.")
     return "jinaai/jina-code-embeddings-1.5b"
+
+def get_worker_model() -> str:
+    """
+    Priority:
+    1. offline_model/ bundled via --add-data  (frozen exe, sys._MEIPASS)
+    2. offline_model/ in project root          (dev / script mode)
+    3. WORKER_MODEL_NAME env var            (HuggingFace download fallback)
+    4. hardcoded HuggingFace default           (last resort)
+    """
+    # 1. Frozen exe — check the bundle first, always
+    if getattr(sys, "frozen", False):
+        bundled = os.path.join(get_meipass_dir(), "offline_model/Qwen_Qwen2.5-Coder-0.5B-Instruct")
+        if os.path.exists(bundled):
+            print(f"[Paths] Using bundled offline model: {bundled}")
+            return bundled
+
+    # 2. Script / dev mode — check project root
+    local = os.path.join(get_app_dir(), "offline_model/"+"Qwen_Qwen2.5-Coder-0.5B-Instruct")
+    if os.path.exists(local):
+        print(f"[Paths] Using local offline model: {local}")
+        return local
+
+    # 3. Env var — treated as a HuggingFace model ID for download
+    env_val = os.environ.get("WORKER_MODEL_NAME")
+    if env_val:
+        print(f"[Paths] No local model found. Falling back to: {env_val}")
+        return env_val
+
+    # 4. Hardcoded last resort
+    print("[Paths] WARNING: No local model and no WORKER_MODEL_NAME set. Using default.")
+    return "Qwen/Qwen2.5-Coder-0.5B-Instruct"
+
+def get_orchestrator_model() -> str:
+    """
+    Priority:
+    1. offline_model/ bundled via --add-data  (frozen exe, sys._MEIPASS)
+    2. offline_model/ in project root          (dev / script mode)
+    3. ORCHESTRATOR_MODEL_NAME env var            (HuggingFace download fallback)
+    4. hardcoded HuggingFace default           (last resort)
+    """
+    # 1. Frozen exe — check the bundle first, always
+    if getattr(sys, "frozen", False):
+        bundled = os.path.join(get_meipass_dir(), "offline_model/Qwen_Qwen2.5-Coder-14B-Instruct")
+        if os.path.exists(bundled):
+            print(f"[Paths] Using bundled offline model: {bundled}")
+            return bundled
+
+    # 2. Script / dev mode — check project root
+    local = os.path.join(get_app_dir(), "offline_model/Qwen_Qwen2.5-Coder-14B-Instruct")
+    if os.path.exists(local):
+        print(f"[Paths] Using local offline model: {local}")
+        return local
+
+    # 3. Env var — treated as a HuggingFace model ID for download
+    env_val = os.environ.get("ORCHESTRATOR_MODEL_NAME")
+    if env_val:
+        print(f"[Paths] No local model found. Falling back to: {env_val}")
+        return env_val
+
+    # 4. Hardcoded last resort
+    print("[Paths] WARNING: No local model and no ORCHESTRATOR_MODEL_NAME set. Using default.")
+    return "Qwen/Qwen2.5-Coder-14B-Instruct"
+
+
 
 def get_docs_dir(source_dir: str = None) -> str:
     return os.environ.get("DOCS_DIR") or \

@@ -5,7 +5,6 @@ main.py — Code-Sentinel entry point.
 import os
 import sys
 
-from core.model_manager import check_ollama_running, warmup_model, ORCHESTRATOR_MODEL
 from ingest.dep_graph import DependencyGraph
 from ingest.symbol_index import SymbolIndex
 from ingest.embedder import load_vector_store
@@ -69,10 +68,6 @@ def main():
 
     print(BANNER)
 
-    if not check_ollama_running():
-        print("ERROR: Ollama is not running. Start with: ollama serve")
-        sys.exit(1)
-
     if not os.path.exists(VECTOR_DIR):
         print(f"ERROR: No vector store. Run:\n  python -m ingest.run_ingest --source {SOURCE_DIR}")
         sys.exit(1)
@@ -84,8 +79,6 @@ def main():
         retriever=retriever, symbol_index=retriever.si, source_dir=SOURCE_DIR)
     docs_pipeline   = DocsPipeline(
         retriever=retriever, source_dir=SOURCE_DIR, docs_dir=DOCS_DIR)
-
-    # warmup_model(ORCHESTRATOR_MODEL, keep_alive_seconds=1800)
 
     while True:
         print("=======================================")

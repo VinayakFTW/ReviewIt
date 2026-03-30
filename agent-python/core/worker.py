@@ -10,10 +10,8 @@ from typing import List, Optional
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from langchain_ollama import ChatOllama
-
-from core.model_manager import WORKER_MODEL,load_worker_model
-from TurboQ import TurboQuantCache
+from core.model_manager import load_worker_model
+from core.turboquant import TurboQuantCache
 
 SPECIALIZATIONS = [
     "security vulnerabilities (SQL injection, XSS, hardcoded secrets, broken auth, path traversal)",
@@ -70,7 +68,6 @@ class WorkerAgent:
         self.retriever = retriever
         self.chunks_per_search = chunks_per_search
         self.max_rounds = max_rounds
-        self.llm = ChatOllama(model=WORKER_MODEL, temperature=0.0, keep_alive="5m")
         self.db_lock = db_lock or threading.Lock()
         self.model, self.tokenizer = load_worker_model()
     

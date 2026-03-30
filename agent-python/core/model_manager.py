@@ -1,5 +1,6 @@
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from core.paths import get_worker_model, get_orchestrator_model
 
 # Global references to keep the model in memory
 _worker_model = None
@@ -11,9 +12,10 @@ def load_worker_model():
     global _worker_model, _worker_tokenizer
     if _worker_model is None:
         print("[ModelManager] Loading qwen2.5-coder:0.5b into PyTorch...")
-        _worker_tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-0.5B-Instruct")
+        local_path = get_worker_model()
+        _worker_tokenizer = AutoTokenizer.from_pretrained(local_path,local_files_only=True)
         _worker_model = AutoModelForCausalLM.from_pretrained(
-            "Qwen/Qwen2.5-Coder-0.5B-Instruct",
+            local_path,
             device_map="auto",
             torch_dtype=torch.float16,
         )
@@ -37,11 +39,13 @@ def load_orchestrator_model():
         # Make sure workers are unloaded to free VRAM!
         unload_workers() 
         
-        _orchestrator_tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-14B-Instruct")
+        local_path = get_orchestrator_model()
+        _orchestrator_tokenizer = AutoTokenizer.from_pretrained(local_path,local_files_only=True)
         _orchestrator_model = AutoModelForCausalLM.from_pretrained(
-            "Qwen/Qwen2.5-Coder-14B-Instruct",
+            local_path,
             device_map="auto",
             torch_dtype=torch.float16,
+            rope_scaling={"type": "dynamic", "factor": 4.0},
         )
     return _orchestrator_model, _orchestrator_tokenizer
 

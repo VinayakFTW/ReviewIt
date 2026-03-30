@@ -13,9 +13,9 @@ This pipeline does NOT run all 10 worker agents — it's designed for fast,
 interactive answers, not a full audit.
 """
 
-from langchain_ollama import ChatOllama
 from retrieval.hybrid_retriever import HybridRetriever, CodeContext
-from core.model_manager import ORCHESTRATOR_MODEL
+from core.model_manager import load_orchestrator_model, unload_orchestrator
+from core.inference import generate_with_turboquant, precompute_system_prefix
 from typing import List
 
 _QA_SYSTEM_PROMPT = """You are a senior software engineer who has read every line of this codebase.
@@ -33,11 +33,9 @@ class QAPipeline:
 
     def __init__(self, retriever: HybridRetriever):
         self.retriever = retriever
-        self.llm = ChatOllama(
-            model=ORCHESTRATOR_MODEL,
-            temperature=0.1,
-            keep_alive="10m",
-        )
+        model, tokenizer = load_orchestrator_model()
+        # Pre-compute the KV cache for the heavy system instructions just once
+        self.system_cache, _ = precompute_system_prefix(_QA_SYSTEM_PROMPT, model, tokenizer)
 
     def ask(self, question: str, verbose: bool = True) -> str:
         if verbose:
@@ -58,12 +56,16 @@ class QAPipeline:
 
         formatted_ctx = self.retriever.format_context(contexts, max_chars=20_000)
 
-        messages = [
-            ("system", _QA_SYSTEM_PROMPT),
-            ("human", f"### QUESTION\n{question}\n\n### CODE CONTEXT\n{formatted_ctx}"),
-        ]
+        user_query = f"### QUESTION\n{question}\n\n### CODE CONTEXT\n{formatted_ctx}"
 
-        answer = self.llm.invoke(messages).content.strip()
+        model, tokenizer = load_orchestrator_model()
+        answer = generate_with_turboquant(
+            user_query=user_query, 
+            base_cache=self.system_cache, 
+            model=model, 
+            tokenizer=tokenizer, 
+            max_new_tokens=1024
+        )
         return answer
 
     def interactive_loop(self):

@@ -20,11 +20,11 @@ import json
 from pathlib import Path
 from typing import List, Optional, Dict, Set, Tuple
 
-from langchain_ollama import ChatOllama
+from core.inference import generate_with_turboquant, precompute_system_prefix
 
 from ingest.ast_parser import parse_file, FileAnalysis, FunctionSymbol, ClassSymbol
 from retrieval.hybrid_retriever import HybridRetriever
-from core.model_manager import ORCHESTRATOR_MODEL
+from core.model_manager import load_orchestrator_model
 
 
 # ---------------------------------------------------------------------------
@@ -33,28 +33,19 @@ from core.model_manager import ORCHESTRATOR_MODEL
 
 _FN_DOC_PROMPT = """Write a concise docstring for this Python function.
 Include: what it does, parameters (with types if missing), return value, raises.
-Output ONLY the docstring text, no triple-quotes, no preamble.
-
-{source}"""
+Output ONLY the docstring text, no triple-quotes, no preamble."""
 
 _MODULE_SUMMARY_PROMPT = """Analyse this Python module and write a concise module-level docstring.
 Include: purpose, public API (key classes/functions), important dependencies.
 Output ONLY the docstring text, no triple-quotes, no preamble.
-Limit to 8 sentences.
-
-File: {filepath}
-Contents overview:
-{overview}"""
+Limit to 8 sentences."""
 
 _ARCHITECTURE_PROMPT = """Based on the module summaries below, write a high-level architecture
 overview document in Markdown. Include:
 - System purpose
 - Module responsibilities (one bullet per module)
 - Data flow between modules
-- External dependencies
-
-Module summaries:
-{module_summaries}"""
+- External dependencies"""
 
 
 # ---------------------------------------------------------------------------
@@ -100,15 +91,16 @@ class DocsPipeline:
         self.retriever = retriever
         self.source_dir = source_dir
         self.docs_dir = docs_dir
-        self.llm = ChatOllama(
-            model=ORCHESTRATOR_MODEL,
-            temperature=0.15,
-            keep_alive="10m",
-        )
         Path(docs_dir).mkdir(parents=True, exist_ok=True)
         # Cache: filepath → module summary (to avoid re-running for unchanged files)
         self._summary_cache_path = os.path.join(docs_dir, ".summary_cache.json")
         self._summary_cache: Dict[str, str] = self._load_cache()
+
+        self.model, self.tokenizer = load_orchestrator_model()
+        # Pre-compute the KV cache for the heavy system instructions just once
+        self.fn_cache, _ = precompute_system_prefix(_FN_DOC_PROMPT, self.model, self.tokenizer)
+        self.module_cache, _ = precompute_system_prefix(_MODULE_SUMMARY_PROMPT, self.model, self.tokenizer)
+        self.arch_cache, _ = precompute_system_prefix(_ARCHITECTURE_PROMPT, self.model, self.tokenizer)
 
     # ------------------------------------------------------------------
     # Public entry points
@@ -161,25 +153,26 @@ class DocsPipeline:
                 continue
 
             # Stage 1: Function-level docs
-            fn_docs = self._document_functions(analysis)
+            fn_docs = self._document_functions(analysis, self.tokenizer, self.model)
 
             # Stage 2: Module-level summary
-            module_summary = self._document_module(analysis, fn_docs)
+            module_summary = self._document_module(analysis, fn_docs, self.tokenizer, self.model)
 
             # Cache the summary
             self._summary_cache[filepath] = module_summary
             self._save_cache()
 
             # Write module doc file
-            self._write_module_doc(filepath, analysis, fn_docs, module_summary)
+            self._write_module_doc(filepath, analysis, fn_docs, module_summary, self.tokenizer, self.model)
 
         # Stage 3: Architecture overview (if structure changed)
         if update_architecture:
             self._update_architecture_doc()
 
-    def _document_functions(self, analysis: FileAnalysis) -> Dict[str, str]:
+    def _document_functions(self, analysis: FileAnalysis,tokenizer, model) -> Dict[str, str]:
         """Generate docstrings for functions that lack them."""
         fn_docs: Dict[str, str] = {}
+
         for fn in analysis.functions:
             if fn.docstring:
                 # Already documented — preserve existing
@@ -189,17 +182,15 @@ class DocsPipeline:
                 continue  # Too short to bother
 
             try:
-                prompt = _FN_DOC_PROMPT.format(source=fn.source[:3000])
-                doc = self.llm.invoke([("human", prompt)]).content.strip()
+                prompt = """{source}""".format(source=fn.source[:3000])
+                doc = generate_with_turboquant(prompt, base_cache=self.fn_cache, model=model, tokenizer=tokenizer)
                 fn_docs[fn.qualified_name] = doc
             except Exception as e:
                 print(f"    [Docs] Could not document {fn.qualified_name}: {e}")
                 fn_docs[fn.qualified_name] = ""
         return fn_docs
 
-    def _document_module(
-        self, analysis: FileAnalysis, fn_docs: Dict[str, str]
-    ) -> str:
+    def _document_module(self, analysis: FileAnalysis, fn_docs: Dict[str, str],tokenizer, model) -> str:
         """Generate a module-level summary."""
         overview_lines = []
         for fn in analysis.functions[:10]:  # top 10 functions
@@ -211,15 +202,17 @@ class DocsPipeline:
 
         overview = "\n".join(overview_lines) or "  (no symbols)"
         try:
-            prompt = _MODULE_SUMMARY_PROMPT.format(
+            prompt = """File: {filepath}
+Contents overview:
+{overview}""".format(
                 filepath=os.path.basename(analysis.path),
                 overview=overview,
             )
-            return self.llm.invoke([("human", prompt)]).content.strip()
+            return generate_with_turboquant(prompt, base_cache=self.module_cache, model=model, tokenizer=tokenizer)
         except Exception as e:
             return f"Error generating module summary: {e}"
 
-    def _update_architecture_doc(self) -> None:
+    def _update_architecture_doc(self, tokenizer, model) -> None:
         """Regenerate top-level architecture.md from all cached module summaries."""
         if not self._summary_cache:
             return
@@ -230,8 +223,9 @@ class DocsPipeline:
             for fp, summary in self._summary_cache.items()
         )
         try:
-            prompt = _ARCHITECTURE_PROMPT.format(module_summaries=summaries_block[:16_000])
-            arch_doc = self.llm.invoke([("human", prompt)]).content.strip()
+            prompt = """Module summaries:
+{module_summaries}""".format(module_summaries=summaries_block[:16_000])
+            arch_doc = generate_with_turboquant(prompt, base_cache=self.arch_cache, model=model, tokenizer=tokenizer)
         except Exception as e:
             arch_doc = f"# Architecture\n\nError: {e}"
 
