@@ -24,6 +24,7 @@ Phase 3 — Synthesis (14B model)
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 from typing import List, Tuple
 
 from langchain_ollama import ChatOllama
@@ -164,6 +165,7 @@ class ReviewPipeline:
                         
                         short_spec = spec.split('(')[0].strip()
                         self.out(f"  [Progress] {completed}/{total_workers} workers done. (Finished: {short_spec})")
+                        time.sleep(1)
                     except Exception as e:
                         short_spec = spec.split('(')[0].strip()
                         self.out(f"  [Progress] {completed}/{total_workers} workers done. (Error in {short_spec}: {e})")

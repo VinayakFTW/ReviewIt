@@ -23,7 +23,7 @@ from textual.message import Message
 from pipelines.qa import QAPipeline
 from pipelines.review import ReviewPipeline
 from pipelines.docs import DocsPipeline
-from core.paths import get_source_dir, get_persist_dir, get_symbol_db, get_dep_graph,get_env_path
+from core.paths import get_source_dir, get_persist_dir, get_symbol_db, get_dep_graph,get_env_path,get_meipass_dir
 from main import load_shared_resources
 
 
@@ -169,7 +169,7 @@ class WelcomeScreen(Screen):
         if button_id == "btn_skip":
             chat_screen.start_loading_resources(reingest=False)
         elif button_id in ("btn_ingest", "btn_reingest"):
-            chat_screen.start_loading_resources(reingest=True)
+            chat_screen.start_loading_resources(reingest=True, verbose=True)
 
 
 class ChatScreen(Screen):
@@ -224,8 +224,8 @@ class ChatScreen(Screen):
         """
         self.post_message(AgentMessage(str(text), "agent"))
 
-    @work(thread=True)
-    def start_loading_resources(self, reingest: bool) -> None:
+    @work(thread=True,exclusive=True)
+    def start_loading_resources(self, reingest: bool, verbose: bool = False) -> None:
         """Background thread for heavy IO/Index loading."""
         app = self.app
         source_dir = get_source_dir()
@@ -236,7 +236,11 @@ class ChatScreen(Screen):
             try:
                 # If we are re-ingesting mid-session, we MUST free DB locks first
                 app.free_database_locks()
-                run_ingest(source_dir, clean=True)
+                if verbose:
+                    self._pipeline_print("Verbose mode enabled: Ingest will print detailed logs to the chat.")
+                    run_ingest(source_dir, clean=True, verbose=verbose, output_callback=self._pipeline_print)
+                else:
+                    run_ingest(source_dir, clean=True)
                 self.post_message(AgentMessage("Ingestion complete! Loading resources..."))
             except Exception as e:
                 self.post_message(AgentMessage(f"Ingestion failed: {e}. You may need to restart the app."))
@@ -263,7 +267,7 @@ class ChatScreen(Screen):
         self.post_message(AgentMessage("System Online. You can ask questions, or use `/review`, `/docs`, or `/reindex`."))
         self.post_message(AppStateChange(is_processing=False))
 
-    @work(thread=True)
+    @work(thread=True,exclusive=True)
     def process_request_bg(self, text: str) -> None:
         """Background thread for LLM generation and Pipeline logic."""
         app = self.app
@@ -295,7 +299,11 @@ class ChatScreen(Screen):
                     self.post_message(AgentMessage("You can ask questions, or use `/review`, `/docs`, or `/reindex`."))
                 elif command.startswith("/reindex"):
                     self.post_message(AgentMessage("Attempting to release file locks and re-index..."))
-                    self.app.call_from_thread(self.start_loading_resources(reingest=True))
+                    if text.split()[1] == 'verbose':
+                        self.app.call_from_thread(self.start_loading_resources(reingest=True,verbose=True))
+                    else:
+                        self.app.call_from_thread(self.start_loading_resources(reingest=True,verbose=False))
+                    
                     self.post_message(AgentMessage("You can ask questions, or use `/review`, `/docs`, or `/reindex`."))
                     return # start_loading_resources handles the AppStateChange internally
                 else:
@@ -314,7 +322,7 @@ class ChatScreen(Screen):
 class CodeSentinelUI(App):
     """The master application class."""
     
-    CSS_PATH = "app.tcss"
+    CSS_PATH = os.path.join(get_meipass_dir(), "app.tcss")
     TITLE = "Code-Sentinel v2"
     SUB_TITLE = "Local AI Code Intelligence"
     

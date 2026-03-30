@@ -105,14 +105,20 @@ def _get_embedding_fn():
 
 def build_vector_store(
     analyses: List[FileAnalysis]
-    , persist_directory: str = None
+    , persist_directory: str = None,
+    output_callback = None,
+    verbose = False
 ) -> Chroma:
     """
     Build (or rebuild) the ChromaDB vector store from parsed FileAnalysis objects.
     Replaces the old ingest.py logic with function-level embeddings.
     """
+    if verbose:
+        output_callback = output_callback or print
+    else:
+        output_callback = print
     docs = _make_documents(analyses)
-    print(f"[Embedder] Embedding {len(docs)} symbol documents...")
+    output_callback(f"[Embedder] Embedding {len(docs)} symbol documents...")
 
     embedding_fn = _get_embedding_fn()
 

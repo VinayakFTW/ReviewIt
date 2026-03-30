@@ -1,5 +1,5 @@
 cd agent-python
-pyinstaller cli.py --name CodeSentinel --onedir \
+pyinstaller tui.py --name CodeSentinel --onedir \
   --collect-all chromadb \
   --collect-all posthog \
   --collect-all langchain_chroma \
@@ -9,5 +9,7 @@ pyinstaller cli.py --name CodeSentinel --onedir \
   --collect-all sentence_transformers \
   --collect-all tokenizers \
   --collect-all huggingface_hub \
+  --collect-all textual \
   --add-data "offline_model;offline_model" \
+  --add-data "app.tcss;." \
   --clean
