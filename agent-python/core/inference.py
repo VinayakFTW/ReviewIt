@@ -9,7 +9,7 @@ def precompute_system_prefix(system_prompt: str, model, tokenizer):
     text = tokenizer.apply_chat_template(messages, tokenize=False)
     
     inputs = tokenizer([text], return_tensors="pt").to(model.device)
-    tq_cache = TurboQuantCache(model.config)
+    tq_cache = TurboQuantCache(config=model.config)
     
     # Run a forward pass to populate the cache (no token generation)
     model(**inputs, past_key_values=tq_cache, use_cache=True)

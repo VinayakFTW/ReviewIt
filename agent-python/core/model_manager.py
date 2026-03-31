@@ -44,7 +44,7 @@ def load_orchestrator_model():
         _orchestrator_model = AutoModelForCausalLM.from_pretrained(
             local_path,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             rope_scaling={"type": "dynamic", "factor": 4.0},
         )
     return _orchestrator_model, _orchestrator_tokenizer

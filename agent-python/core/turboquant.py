@@ -4,7 +4,12 @@ from typing import Dict, Any, Tuple
 
 class TurboQuantCache(Cache):
     def __init__(self, config, compression_bits=4):
-        super().__init__()
+
+        try:
+            super().__init__()
+        except:
+            super().__init__(layers=[])
+        self.config = config
         self.compression_bits = compression_bits
         
         # Safely extract head_dim from Qwen config

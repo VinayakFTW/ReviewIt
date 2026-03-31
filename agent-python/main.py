@@ -74,11 +74,6 @@ def main():
 
     retriever = load_shared_resources()
 
-    qa_pipeline     = QAPipeline(retriever)
-    review_pipeline = ReviewPipeline(
-        retriever=retriever, symbol_index=retriever.si, source_dir=SOURCE_DIR)
-    docs_pipeline   = DocsPipeline(
-        retriever=retriever, source_dir=SOURCE_DIR, docs_dir=DOCS_DIR)
 
     while True:
         print("=======================================")
@@ -98,12 +93,17 @@ def main():
         if choice in ("q", "quit", "exit"):
             break
         elif choice == "1":
+            qa_pipeline     = QAPipeline(retriever)
             qa_pipeline.interactive_loop()
         elif choice == "2":
             scope = input("Scope (Enter = full audit): ").strip() or "Full codebase audit"
+            review_pipeline = ReviewPipeline(
+        retriever=retriever, symbol_index=retriever.si, source_dir=SOURCE_DIR)
             review_pipeline.run(user_request=scope)
         elif choice == "3":
             mode = input("Full [f] or incremental [i]? ").strip().lower()
+            docs_pipeline   = DocsPipeline(
+        retriever=retriever, source_dir=SOURCE_DIR, docs_dir=DOCS_DIR)
             if mode == "f":
                 docs_pipeline.run_full()
             else:

@@ -33,9 +33,9 @@ class QAPipeline:
 
     def __init__(self, retriever: HybridRetriever):
         self.retriever = retriever
-        model, tokenizer = load_orchestrator_model()
+        self.model, self.tokenizer = load_orchestrator_model()
         # Pre-compute the KV cache for the heavy system instructions just once
-        self.system_cache, _ = precompute_system_prefix(_QA_SYSTEM_PROMPT, model, tokenizer)
+        self.system_cache, _ = precompute_system_prefix(_QA_SYSTEM_PROMPT, self.model, self.tokenizer)
 
     def ask(self, question: str, verbose: bool = True) -> str:
         if verbose:
@@ -58,12 +58,11 @@ class QAPipeline:
 
         user_query = f"### QUESTION\n{question}\n\n### CODE CONTEXT\n{formatted_ctx}"
 
-        model, tokenizer = load_orchestrator_model()
         answer = generate_with_turboquant(
             user_query=user_query, 
             base_cache=self.system_cache, 
-            model=model, 
-            tokenizer=tokenizer, 
+            model=self.model, 
+            tokenizer=self.tokenizer, 
             max_new_tokens=1024
         )
         return answer

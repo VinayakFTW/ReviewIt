@@ -112,6 +112,7 @@ def main():
                 break 
             elif choice == "3":
                 print("Exiting Code-Sentinel.")
+                
                 sys.exit(0)
             else:
                 print("Invalid choice. Please enter 1, 2, or 3.")
