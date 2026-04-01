@@ -105,12 +105,9 @@ class ReviewPipeline:
         self.symbol_index = symbol_index
         self.source_dir = source_dir
         self.max_workers = max_workers
-        model, tokenizer = load_orchestrator_model()
-        self.review_base_cache, _ = precompute_system_prefix(
-            _SYNTHESIS_PROMPT, 
-            model,
-            tokenizer
-        )
+        self.model = None
+        self.tokenizer = None
+        self.review_base_cache, _ = None, None # precompute_system_prefix(_SYNTHESIS_PROMPT, self.model, self.tokenizer)
 
     def run(self, user_request: str = "Full codebase audit") -> Tuple[str, str]:
         print(f"\n{'─'*55}")
@@ -172,6 +169,8 @@ class ReviewPipeline:
         # Phase 3: 14B synthesis
         # ------------------------------------------------------------------
         print("\n[Phase 3/3] Synthesising report with 14B model...")
+        self.model, self.tokenizer = load_orchestrator_model()
+        self.review_base_cache, _ = precompute_system_prefix(_SYNTHESIS_PROMPT, self.model, self.tokenizer)
         review_md, docs_md = self._synthesise(
             user_request, static_findings, semantic_findings
         )

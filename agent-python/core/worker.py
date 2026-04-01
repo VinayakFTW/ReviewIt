@@ -82,7 +82,7 @@ class WorkerAgent:
             max_new_tokens=512,
             past_key_values=tq_cache, # Inject the compression algorithm
             use_cache=True,
-            temperature=0.0
+            temperature=0.05
         )
         
         response = self.tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)

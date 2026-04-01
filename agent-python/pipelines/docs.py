@@ -163,11 +163,11 @@ class DocsPipeline:
             self._save_cache()
 
             # Write module doc file
-            self._write_module_doc(filepath, analysis, fn_docs, module_summary, self.tokenizer, self.model)
+            self._write_module_doc(filepath, analysis, fn_docs, module_summary)
 
         # Stage 3: Architecture overview (if structure changed)
         if update_architecture:
-            self._update_architecture_doc()
+            self._update_architecture_doc(self.tokenizer, self.model)
 
     def _document_functions(self, analysis: FileAnalysis,tokenizer, model) -> Dict[str, str]:
         """Generate docstrings for functions that lack them."""

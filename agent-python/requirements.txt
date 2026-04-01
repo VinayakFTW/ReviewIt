@@ -14,3 +14,4 @@ gitpython
 python-dotenv
 transformers>=4.40.0
 accelerate>=0.26.0
+bitsandbytes

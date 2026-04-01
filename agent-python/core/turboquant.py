@@ -38,26 +38,18 @@ class TurboQuantCache(Cache):
 
     def _compress(self, x: torch.Tensor):
         """Encodes a full precision tensor into quantized state tuples."""
-        # x shape: [batch, num_heads, seq_len, head_dim]
         rotated_x = torch.matmul(x, self.rotation_matrix)
         
-        # --- Base Quantization (4-bit Uniform) ---
         min_val = rotated_x.amin(dim=-1, keepdim=True)
         max_val = rotated_x.amax(dim=-1, keepdim=True)
         
-        # Calculate step scale for target bits
         scale = (max_val - min_val) / ((1 << self.compression_bits) - 1)
-        scale = scale.clamp(min=1e-5) # Prevent division by zero
-        
-        # Quantize to int8
+        scale = scale.clamp(min=1e-5) 
         q_x = torch.round((rotated_x - min_val) / scale).to(torch.int8)
         
-        # --- Residual QJL (1-bit) ---
-        # Calculate what the error currently is
         dequantized_base = (q_x.to(x.dtype) * scale) + min_val
         residual = rotated_x - dequantized_base
         
-        # Extract sign (1-bit) and the magnitude scale of the residual
         qjl_sign = torch.sign(residual).to(torch.int8)
         qjl_scale = residual.abs().mean(dim=-1, keepdim=True) 
         
@@ -90,27 +82,37 @@ class TurboQuantCache(Cache):
         cache_kwargs: Dict[str, Any] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         
-        # Ensure matrices match the current layer's tensors
         self._init_matrices(key_states.device, key_states.dtype)
 
-        # 1. Compress the incoming new tokens
         new_compressed_k = self._compress(key_states)
         new_compressed_v = self._compress(value_states)
 
-        # 2. Append to persistent cache
         if layer_idx not in self.key_cache:
-            # First token (prompt processing)
             self.key_cache[layer_idx] = new_compressed_k
             self.value_cache[layer_idx] = new_compressed_v
+            
+            full_k = self._decompress(self.key_cache[layer_idx])
+            full_v = self._decompress(self.value_cache[layer_idx])
         else:
-            # Subsequent tokens (autoregressive generation)
+            if not hasattr(self, 'decompressed_key_cache'):
+                self.decompressed_key_cache = {}
+                self.decompressed_value_cache = {}
+                
+            if layer_idx not in self.decompressed_key_cache:
+                self.decompressed_key_cache[layer_idx] = self._decompress(self.key_cache[layer_idx])
+                self.decompressed_value_cache[layer_idx] = self._decompress(self.value_cache[layer_idx])
+                
             self.key_cache[layer_idx] = self._concat_states(self.key_cache[layer_idx], new_compressed_k)
             self.value_cache[layer_idx] = self._concat_states(self.value_cache[layer_idx], new_compressed_v)
 
-        # 3. Decompress the *entire* sequence to return to standard Attention
-        full_k = self._decompress(self.key_cache[layer_idx])
-        full_v = self._decompress(self.value_cache[layer_idx])
+            decompressed_new_k = self._decompress(new_compressed_k)
+            decompressed_new_v = self._decompress(new_compressed_v)
 
+            full_k = torch.cat([self.decompressed_key_cache[layer_idx], decompressed_new_k], dim=-2)
+            full_v = torch.cat([self.decompressed_value_cache[layer_idx], decompressed_new_v], dim=-2)
+            
+            self.decompressed_key_cache[layer_idx] = full_k
+            self.decompressed_value_cache[layer_idx] = full_v
         return full_k, full_v
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
@@ -124,15 +126,12 @@ class TurboQuantCache(Cache):
         return 32768
     
     def clone(self):
-        """Creates a lightweight copy of the cache to reuse the prefix across different queries."""
-        import copy
         new_cache = TurboQuantCache(self.config, self.compression_bits)
         new_cache.rotation_matrix = self.rotation_matrix
         new_cache.inverse_rotation = self.inverse_rotation
         new_cache.head_dim = self.head_dim
         
-        # Deepcopy the state dictionaries so appending new tokens doesn't mutate the base prefix
-        new_cache.key_cache = copy.deepcopy(self.key_cache)
-        new_cache.value_cache = copy.deepcopy(self.value_cache)
+        new_cache.key_cache = {k: tuple(t.clone() for t in v) for k, v in self.key_cache.items()}
+        new_cache.value_cache = {k: tuple(t.clone() for t in v) for k, v in self.value_cache.items()}
         
         return new_cache
