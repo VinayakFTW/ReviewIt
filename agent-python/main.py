@@ -5,7 +5,7 @@ main.py — Code-Sentinel entry point.
 import os
 import sys
 
-from core.model_manager import check_ollama_running, warmup_model, ORCHESTRATOR_MODEL
+from core.model_manager import check_ollama_running, ORCHESTRATOR_MODEL
 from ingest.dep_graph import DependencyGraph
 from ingest.symbol_index import SymbolIndex
 from ingest.embedder import load_vector_store

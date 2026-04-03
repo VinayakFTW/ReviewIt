@@ -38,29 +38,6 @@ def unload_workers():
     # Brief pause to let Ollama finish the eviction before 14B loads.
     time.sleep(1.5)
 
-
-def warmup_model(model_name: str, keep_alive_seconds: int = 600):
-    """
-    Pre-loads a model into Ollama so the first real request isn't cold.
-    Optional but reduces first-token latency.
-    """
-    try:
-        print(f"[ModelManager] Warming up '{model_name}'...")
-        requests.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            json={
-                "model": model_name,
-                "keep_alive": keep_alive_seconds,
-                "prompt": ".",
-                "stream": False,
-            },
-            timeout=120,
-        )
-        print(f"[ModelManager] '{model_name}' ready.")
-    except requests.exceptions.RequestException as e:
-        print(f"[ModelManager] Warning: warmup failed for '{model_name}': {e}")
-
-
 def check_ollama_running() -> bool:
     """Quick health check — returns False if Ollama isn't reachable."""
     try:

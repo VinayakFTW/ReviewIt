@@ -1,7 +1,7 @@
 from huggingface_hub import snapshot_download
 import os
 
-local_dir = os.path.join(os.getcwd(), "offline_model")
+local_dir = os.path.join(os.getcwd(), "agent-python\\offline_model")
 os.makedirs(local_dir, exist_ok=True)
 
 print("Downloading jina-code-embeddings-1.5b")

@@ -170,16 +170,7 @@ class ReviewPipeline:
             except KeyboardInterrupt:
                 print("\n[!] Force quitting: Review interrupted by user. Cancelling pending workers...")
                 pool.shutdown(wait=False, cancel_futures=True)
-                raise  #
-
-
-            # for future in as_completed(futures):
-            #     try:
-            #         findings = future.result()
-            #         semantic_findings.extend(findings)
-            #     except Exception as e:
-            #         spec = futures[future]
-            #         print(f"  [Worker] {spec[:30]}... error: {e}")
+                raise  
 
         print(f"  Semantic analysis: {len(semantic_findings)} finding(s).")
 
