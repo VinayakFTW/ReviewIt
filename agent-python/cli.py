@@ -62,7 +62,6 @@ def main():
                 if not os.path.exists(env_path):
                     open(env_path, 'a').close()
 
-                # bootstrap_dependencies()
                 setup_environment(repo_path)
 
                 from dotenv import set_key

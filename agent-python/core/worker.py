@@ -93,15 +93,46 @@ class WorkerAgent:
 
             if not new_contexts:
                 break
+            
+            MAX_CHARS_PER_BATCH = 12000
 
-            snippets = "\n\n---\n\n".join(ctx.format_for_prompt() for ctx in new_contexts)
-            findings = self._analyse(snippets, new_contexts)
-            all_findings.extend(findings)
+            current_batch_snippets = []
+            current_batch_contexts = []
+            current_chars = 0
+            round_findings = []
+            for ctx in new_contexts:
+                formatted = ctx.format_for_prompt()
+                length = len(formatted)
+                
+                # If adding this context exceeds the limit AND the batch isn't empty, process it
+                if current_chars + length > MAX_CHARS_PER_BATCH and current_batch_snippets:
+                    snippets_text = "\n\n---\n\n".join(current_batch_snippets)
+                    batch_findings = self._analyse(snippets_text, current_batch_contexts)
+                    round_findings.extend(batch_findings)
+                    
+                    # Reset the batch
+                    current_batch_snippets = []
+                    current_batch_contexts = []
+                    current_chars = 0
+                
+                # Add the current context to the newly cleared (or still growing) batch
+                current_batch_snippets.append(formatted)
+                current_batch_contexts.append(ctx)
+                current_chars += length
+                
+            # Process any remaining contexts in the final batch
+            if current_batch_snippets:
+                snippets_text = "\n\n---\n\n".join(current_batch_snippets)
+                batch_findings = self._analyse(snippets_text, current_batch_contexts)
+                round_findings.extend(batch_findings)
 
-            if not findings or round_idx == self.max_rounds - 1:
+            all_findings.extend(round_findings)
+
+            if not round_findings or round_idx == self.max_rounds - 1:
                 break
-            queries = self._refine_queries(queries, findings)
+            queries = self._refine_queries(queries, round_findings)
 
+        print(f"  [Worker:{self._short()}] {len(all_findings)} finding(s).")
         return all_findings
 
     def _short(self):
@@ -112,7 +143,7 @@ class WorkerAgent:
         prompt = _SEARCH_QUERY_PROMPT.format(
             specialization=self.specialization, user_request=user_request)
         try:
-            rprint(f"  [dim]↳ Worker '{self._short()}' querying 0.5b model...[/dim]")
+            # rprint(f"  [dim]↳ Worker '{self._short()}' querying 0.5b model...[/dim]")
             response = self.llm.invoke([("human", prompt)]).content.strip()
             queries = [q.strip() for q in response.split("\n") if q.strip()]
             return queries[:3] or [self.specialization.split("(")[0].strip()]
@@ -128,7 +159,7 @@ class WorkerAgent:
 
     def _analyse(self, snippets, contexts):
         from rich import print as rprint
-        rprint(f"  [dim]↳ Worker '{self._short()}' analyzing {len(contexts)} code chunks...[/dim]")
+        # rprint(f"  [dim]↳ Worker '{self._short()}' analyzing {len(contexts)} code chunks...[/dim]")
         prompt = _ANALYSIS_PROMPT.format(
             specialization=self.specialization, snippets=snippets)
         try:
