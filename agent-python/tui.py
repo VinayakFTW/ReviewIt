@@ -264,7 +264,8 @@ class ChatScreen(Screen):
             output_callback=self._pipeline_print
         )
         
-        self.post_message(AgentMessage("System Online. You can ask questions, or use `/review`, `/docs`, or `/reindex`."))
+        self.post_message(AgentMessage("System Online. Use /help for a list of commands."))
+        self.post_message(AgentMessage("You can ask questions, or use `/review`, `/docs`, or `/reindex`."))
         self.post_message(AppStateChange(is_processing=False))
 
     @work(thread=True,exclusive=True)
@@ -275,12 +276,18 @@ class ChatScreen(Screen):
         try:
             if text.startswith("/"):
                 command = text.lower()
+                if command == "/help":
+                    self.post_message(AgentMessage("Available commands:\n\n"
+                        "- `/review`: Run a full codebase audit and get a markdown report.\n"
+                        "- `/docs [full|inc|<git-ref>]`: Generate documentation. `full` for everything, `inc` for changes since last commit, or specify a git ref.\n"
+                        "- `/reindex [verbose]`: Attempt to release file locks and re-index the codebase. Use `verbose` for detailed logs in chat.\n"
+                    ))
                 
                 if command.startswith("/review"):
                     self.post_message(AgentMessage("Starting full codebase audit..."))
                     review_md, _ = app.review_pipeline.run(user_request="Full codebase audit")
                     self.post_message(AgentMessage(f"Review complete!\n\n{review_md}"))
-                    self.post_message(AgentMessage("You can ask questions, or use `/review`, `/docs`, or `/reindex`."))
+                    self.post_message(AgentMessage("You can ask questions, or use `/review`, `/docs`, or `/reindex`, or `/help`."))
                     
                 elif command.startswith("/docs"):
                     parts = text.split()
@@ -296,7 +303,7 @@ class ChatScreen(Screen):
                         app.docs_pipeline.run_incremental(since=since_ref)
                         
                     self.post_message(AgentMessage("Documentation generation complete."))
-                    self.post_message(AgentMessage("You can ask questions, or use `/review`, `/docs`, or `/reindex`."))
+                    self.post_message(AgentMessage("You can ask questions, or use `/review`, `/docs`, or `/reindex`, or `/help`."))
                 elif command.startswith("/reindex"):
                     self.post_message(AgentMessage("Attempting to release file locks and re-index..."))
                     if text.split()[1] == 'verbose':
@@ -304,7 +311,7 @@ class ChatScreen(Screen):
                     else:
                         self.app.call_from_thread(self.start_loading_resources(reingest=True,verbose=False))
                     
-                    self.post_message(AgentMessage("You can ask questions, or use `/review`, `/docs`, or `/reindex`."))
+                    self.post_message(AgentMessage("You can ask questions, or use `/review`, `/docs`, or `/reindex`, or `/help`."))
                     return # start_loading_resources handles the AppStateChange internally
                 else:
                     self.post_message(AgentMessage(f"Unknown command: `{command}`"))
