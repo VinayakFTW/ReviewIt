@@ -95,16 +95,45 @@ class WorkerAgent:
             if not new_contexts:
                 break
 
-            snippets = "\n\n---\n\n".join(ctx.format_for_prompt() for ctx in new_contexts)
-            print(f"  [Worker:{self.specialization}] Round {round_idx + 1}/{self.max_rounds}: Analysing {len(new_contexts)} snippets...")
-            findings = self._analyse(snippets, new_contexts)
-            all_findings.extend(findings)
+            MAX_CHARS_PER_BATCH = 12000
+            
+            current_batch_snippets = []
+            current_batch_contexts = []
+            current_chars = 0
+            round_findings = []
+            for ctx in new_contexts:
+                formatted = ctx.format_for_prompt()
+                length = len(formatted)
+                
+                # If adding this context exceeds the limit AND the batch isn't empty, process it
+                if current_chars + length > MAX_CHARS_PER_BATCH and current_batch_snippets:
+                    snippets_text = "\n\n---\n\n".join(current_batch_snippets)
+                    batch_findings = self._analyse(snippets_text, current_batch_contexts)
+                    round_findings.extend(batch_findings)
+                    
+                    # Reset the batch
+                    current_batch_snippets = []
+                    current_batch_contexts = []
+                    current_chars = 0
+                
+                # Add the current context to the newly cleared (or still growing) batch
+                current_batch_snippets.append(formatted)
+                current_batch_contexts.append(ctx)
+                current_chars += length
+                
+            # Process any remaining contexts in the final batch
+            if current_batch_snippets:
+                snippets_text = "\n\n---\n\n".join(current_batch_snippets)
+                batch_findings = self._analyse(snippets_text, current_batch_contexts)
+                round_findings.extend(batch_findings)
 
-            if not findings or round_idx == self.max_rounds - 1:
+            all_findings.extend(round_findings)
+
+            if not round_findings or round_idx == self.max_rounds - 1:
                 break
-            queries = self._refine_queries(queries, findings)
+            queries = self._refine_queries(queries, round_findings)
 
-        print(f"  [Worker:{self.specialization}] {len(all_findings)} finding(s).")
+        print(f"  [Worker:{self._short()}] {len(all_findings)} finding(s).")
         return all_findings
 
     def _short(self):
