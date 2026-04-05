@@ -17,13 +17,13 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.screen import Screen
 from textual.containers import VerticalScroll, Horizontal, Center, Vertical
-from textual.widgets import Header, Footer, Input, Markdown, Static, Button
+from textual.widgets import Header, Footer, Input, Markdown, Static, Button,ProgressBar,Label
 from textual.message import Message
 
 from pipelines.qa import QAPipeline
 from pipelines.review import ReviewPipeline
 from pipelines.docs import DocsPipeline
-from core.paths import get_source_dir, get_persist_dir, get_symbol_db, get_dep_graph,get_env_path,get_meipass_dir
+from core.paths import get_source_dir, get_persist_dir, get_symbol_db, get_dep_graph,get_env_path,get_meipass_dir,download_to_program_files,is_model_available
 from main import load_shared_resources
 
 
@@ -179,6 +179,11 @@ class ChatScreen(Screen):
         yield Header()
         with VerticalScroll(id="chat-container"):
             yield Static(id="chat-history")
+        
+        with Vertical(id="download-overlay", classes="hidden"):
+            yield Label("Downloading Embedding Model...", id="download-label")
+            yield ProgressBar(id="download-bar", total=100, show_eta=True)
+
         with Horizontal(id="input-container"):
             yield Input(placeholder="Ask about the code or type a /command...", id="chat-input")
         yield Footer()
@@ -229,7 +234,24 @@ class ChatScreen(Screen):
         """Background thread for heavy IO/Index loading."""
         app = self.app
         source_dir = get_source_dir()
-        
+        if not is_model_available():
+            self.post_message(AgentMessage("Embedding model not found locally. Downloading now..."))
+            
+            overlay = self.query_one("#download-overlay")
+            pbar = self.query_one("#download-bar", ProgressBar)
+            overlay.remove_class("hidden")
+
+            def update_pbar(current: float, total: float):
+                # Thread-safe update to the UI progress bar
+                self.app.call_from_thread(pbar.update, total=total, progress=current)
+            try:
+                download_to_program_files(progress_callback=update_pbar)
+                self.post_message(AgentMessage("Model download complete!"))
+            except Exception as e:
+                self.post_message(AgentMessage(f"Model download failed: {e}. The app cannot run without the embedding model."))
+            finally:
+                overlay.add_class("hidden")
+
         if reingest:
             self.post_message(AgentMessage("Starting codebase ingestion. This might take a minute..."))
             from ingest.run_ingest import run_ingest
@@ -304,13 +326,12 @@ class ChatScreen(Screen):
                         
                     self.post_message(AgentMessage("Documentation generation complete."))
                     self.post_message(AgentMessage("You can ask questions, or use `/review`, `/docs`, or `/reindex`, or `/help`."))
+                
                 elif command.startswith("/reindex"):
                     self.post_message(AgentMessage("Attempting to release file locks and re-index..."))
-                    if text.split()[1] == 'verbose':
-                        self.app.call_from_thread(self.start_loading_resources(reingest=True,verbose=True))
-                    else:
-                        self.app.call_from_thread(self.start_loading_resources(reingest=True,verbose=False))
-                    
+                    parts = text.split()
+                    is_verbose = len(parts) > 1 and parts[1] == 'verbose'
+                    self.app.call_from_thread(self.start_loading_resources,True,is_verbose)
                     self.post_message(AgentMessage("You can ask questions, or use `/review`, `/docs`, or `/reindex`, or `/help`."))
                     return # start_loading_resources handles the AppStateChange internally
                 else:

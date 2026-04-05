@@ -98,3 +98,25 @@ Input {
     text-align: center;
     margin-bottom: 1;
 }
+
+/* download overlay */
+
+/* agent-python/app.tcss */
+
+#download-overlay {
+    height: auto;
+    background: $surface;
+    border: thick $accent;
+    margin: 2 10;
+    padding: 1 2;
+    align: center middle;
+}
+
+#download-label {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.hidden {
+    display: none;
+}

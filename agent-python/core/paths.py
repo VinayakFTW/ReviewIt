@@ -9,7 +9,19 @@ Key rule: never use __file__ for writable paths.
 """
 import os
 import sys
+from tqdm import tqdm
 from huggingface_hub import snapshot_download
+
+class TextualProgress(tqdm):
+    """Custom TQDM wrapper to send updates to the Textual UI."""
+    def __init__(self, *args, progress_callback=None, **kwargs):
+        self.progress_callback = progress_callback
+        super().__init__(*args, **kwargs)
+
+    def display(self, msg=None, pos=None):
+        if self.progress_callback:
+            self.progress_callback(self.n, self.total)
+        return super().display(msg, pos)
 
 def get_app_dir() -> str:
     """
@@ -76,18 +88,23 @@ def get_dep_graph() -> str:
     return os.environ.get("DEP_GRAPH_PATH") or \
            os.path.join(get_data_dir(), "dep_graph.graphml")
 
-def download_to_program_files():
+def download_to_program_files(progress_callback=None):
     # Resolves to C:\Program Files\CodeSentinel when installed
     install_dir = get_app_dir() 
     local_dir = os.path.join(install_dir, "offline_model")
     
     os.makedirs(local_dir, exist_ok=True)
     
+    class TqdmWrapper(TextualProgress):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, progress_callback=progress_callback, **kwargs)
+
     snapshot_download(
         repo_id="jinaai/jina-code-embeddings-1.5b", 
         local_dir=local_dir,
         ignore_patterns=["*.msgpack", "*.h5", "rust_model.ot", "*.onnx"],
-        local_dir_use_symlinks=False # Important for Windows portability
+        local_dir_use_symlinks=False,
+        tqdm_class=TqdmWrapper
     )
 
 def get_embedding_model() -> str:
@@ -131,6 +148,18 @@ def get_embedding_model() -> str:
         except Exception as e:
            print(f"Failed to download model': {e}")
            return None
+
+def is_model_available() -> bool:
+    """Check if the model exists without triggering a download."""
+    # Check bundled path for frozen exe
+    if getattr(sys, "frozen", False):
+        bundled = os.path.join(get_meipass_dir(), "offline_model")
+        if os.path.exists(bundled) and "config.json" in os.listdir(bundled):
+            return True
+            
+    # Check local path for dev mode
+    local = os.path.join(get_app_dir(), "offline_model")
+    return os.path.exists(local) and "config.json" in os.listdir(local)
 
 def get_docs_dir(source_dir: str = None) -> str:
     return os.environ.get("DOCS_DIR") or \
