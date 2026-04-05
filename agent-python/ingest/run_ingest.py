@@ -26,6 +26,8 @@ from ingest.dep_graph import DependencyGraph
 from ingest.embedder import build_vector_store
 from core.paths import get_dep_graph, get_symbol_db, get_persist_dir
 
+_GLOBAL_EMBEDDING_FN = None
+
 def run_ingest(source_dir: str, clean: bool = True) -> None:
     GRAPH_PATH = get_dep_graph()
     SYMBOL_DB  = get_symbol_db()
@@ -45,8 +47,16 @@ def run_ingest(source_dir: str, clean: bool = True) -> None:
                 os.remove(path)
                 print(f"Removed old index: {path}")
         if os.path.exists(VECTOR_DIR):
-            shutil.rmtree(VECTOR_DIR)
-            print(f"Removed old vector store: {VECTOR_DIR}")
+            try:
+                shutil.rmtree(VECTOR_DIR)
+                print(f"Removed old vector store: {VECTOR_DIR}")
+            except OSError:
+                from ingest.embedder import load_vector_store
+                try:
+                    db = load_vector_store(VECTOR_DIR)
+                    db.delete_collection()
+                except Exception as e:
+                    print(f"Error occurred while deleting vector collection: {e}")
 
     # Step 1 — AST parse
     print("\n[1/4] Parsing source files with AST...")

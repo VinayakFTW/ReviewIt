@@ -9,6 +9,7 @@ import requests
 import tempfile
 import zipfile
 import shutil
+from core.paths import get_embedding_model
 
 # The models required for the agent
 MODELS = ["qwen2.5-coder:0.5b", "qwen2.5-coder:14b"]
@@ -132,6 +133,11 @@ def bootstrap_dependencies():
             sys.exit(1)
             
     pull_models()
+
+    if get_embedding_model():
+        print("\n[Setup] Found embedding model locally...")
+    else:
+        print("\n[Setup] No embedding model found.")
 
 def setup_environment(source_dir: str):
     """

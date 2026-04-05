@@ -76,7 +76,7 @@ class WorkerAgent:
         seen: set = set()
         queries = self._generate_queries(user_request)
 
-        MAX_CHARS_PER_BATCH = 13000
+        MAX_CHARS_PER_BATCH = 12000
 
         for round_idx in range(self.max_rounds):
             new_contexts = []
