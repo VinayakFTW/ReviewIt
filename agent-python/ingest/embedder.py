@@ -31,6 +31,7 @@ from core.paths import get_embedding_model, get_persist_dir,get_env_path
 load_dotenv(dotenv_path=get_env_path())
 COLLECTION_NAME = "codebase_symbols"
 
+_GLOBAL_EMBEDDING_FN = None
 
 def _make_documents(analyses: List[FileAnalysis]) -> List[Document]:
     """
@@ -97,12 +98,24 @@ def _make_documents(analyses: List[FileAnalysis]) -> List[Document]:
     return docs
 
 def _get_embedding_fn():
+    global _GLOBAL_EMBEDDING_FN
+    if _GLOBAL_EMBEDDING_FN is not None:
+        return _GLOBAL_EMBEDDING_FN
     model_name = get_embedding_model()
-    print(f"[Embedder] Using model: {model_name}")
-    return HuggingFaceEmbeddings(
-        model_name=model_name,
-        model_kwargs={"device": "cuda", "trust_remote_code": True},
-    )
+    if model_name:
+        print(f"[Embedder] Using model: {model_name}")
+        _GLOBAL_EMBEDDING_FN = HuggingFaceEmbeddings(
+            model_name=model_name,
+            model_kwargs={"device": "cuda", "trust_remote_code": True},
+        )
+        return _GLOBAL_EMBEDDING_FN
+    else:
+        print("[Embedder] No embedding model found. Using default HuggingFace model (jinaai/jina-code-embeddings-1.5b).")
+        _GLOBAL_EMBEDDING_FN = HuggingFaceEmbeddings(
+            model_name="jinaai/jina-code-embeddings-1.5b",
+            model_kwargs={"device": "cuda", "trust_remote_code": True},
+        )
+        return _GLOBAL_EMBEDDING_FN
 
 def build_vector_store(
     analyses: List[FileAnalysis]

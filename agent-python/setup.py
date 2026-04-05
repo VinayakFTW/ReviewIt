@@ -9,6 +9,9 @@ import requests
 import tempfile
 import zipfile
 import shutil
+
+from core.paths import get_embedding_model
+
 from rich.console import Console
 from rich import print
 console = Console()
@@ -141,6 +144,11 @@ def bootstrap_dependencies():
             sys.exit(1)
             
     pull_models()
+
+    if get_embedding_model():
+        print("\n[Setup] Found embedding model locally...")
+    else:
+        print("\n[Setup] No embedding model found.")
 
 def setup_environment(source_dir: str):
     """

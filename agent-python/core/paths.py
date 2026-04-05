@@ -10,6 +10,7 @@ Key rule: never use __file__ for writable paths.
 import os
 import sys
 from rich import print
+from huggingface_hub import snapshot_download
 
 def get_app_dir() -> str:
     """
@@ -49,6 +50,13 @@ def get_data_dir() -> str:
     data/ directory — writable, next to the exe.
     Reads DATA_DIR env var first (set by cli.py after user picks a repo).
     """
+    if getattr(sys, "frozen", False):
+        # Move writable data to %LOCALAPPDATA%\CodeSentinel\data
+        user_data_dir = os.path.join(os.environ["LOCALAPPDATA"], "CodeSentinel", "data")
+        os.makedirs(user_data_dir, exist_ok=True)
+        return user_data_dir
+    
+    # Fallback for development mode
     val = os.environ.get("DATA_DIR")
     if val:
         return val
@@ -69,6 +77,19 @@ def get_dep_graph() -> str:
     return os.environ.get("DEP_GRAPH_PATH") or \
            os.path.join(get_data_dir(), "dep_graph.graphml")
 
+def download_to_program_files():
+    # Resolves to C:\Program Files\CodeSentinel when installed
+    install_dir = get_app_dir() 
+    local_dir = os.path.join(install_dir, "offline_model")
+    
+    os.makedirs(local_dir, exist_ok=True)
+    
+    snapshot_download(
+        repo_id="jinaai/jina-code-embeddings-1.5b", 
+        local_dir=local_dir,
+        ignore_patterns=["*.msgpack", "*.h5", "rust_model.ot", "*.onnx"],
+        local_dir_use_symlinks=False # Important for Windows portability
+    )
 
 def get_embedding_model() -> str:
     """
@@ -82,24 +103,35 @@ def get_embedding_model() -> str:
     if getattr(sys, "frozen", False):
         bundled = os.path.join(get_meipass_dir(), "offline_model")
         if os.path.exists(bundled):
-            print(f"[Paths] Using bundled offline model: {bundled}")
-            return bundled
+            if "config.json" in os.listdir(bundled):
+                print(f"[Paths] Using bundled offline model: {bundled}")
+                return bundled
+            else:
+                print(f"[Paths] Found bundled offline_model at {bundled} but it's missing config.json. Trying to download offline_model.")
+                try:
+                    download_to_program_files()
+                    if "config.json" in os.listdir(bundled):
+                        return bundled
+                    else:
+                        return None
+                except Exception as e:
+                    print(f"Failed to download model': {e}")
+                    return None
 
     # 2. Script / dev mode — check project root
     local = os.path.join(get_app_dir(), "offline_model")
-    if os.path.exists(local):
+    if os.path.exists(local) and "config.json" in os.listdir(local):
         print(f"[Paths] Using local offline model: {local}")
         return local
 
-    # 3. Env var — treated as a HuggingFace model ID for download
-    env_val = os.environ.get("EMBEDDING_MODEL_NAME")
-    if env_val:
-        print(f"[Paths] No local model found. Falling back to: {env_val}")
-        return env_val
-
-    # 4. Hardcoded last resort
-    print("[Paths] WARNING: No local model and no EMBEDDING_MODEL_NAME set. Using default.")
-    return "jinaai/jina-code-embeddings-1.5b"
+    else:
+        print(f"[Paths] Found offline_model at {local} but it's missing config.json. Attempting to download offline_model.")
+        try:
+            download_to_program_files()
+            return local
+        except Exception as e:
+           print(f"Failed to download model': {e}")
+           return None
 
 def get_docs_dir(source_dir: str = None) -> str:
     return os.environ.get("DOCS_DIR") or \

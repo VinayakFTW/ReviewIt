@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
+import time
 
 console = Console()
 env_path = get_env_path()
@@ -85,15 +86,34 @@ def main():
 
         if needs_ingestion:
             console.print("\n[bold cyan]Starting repository ingestion...[/bold cyan]")
+            from core.paths import get_embedding_model,download_to_program_files
             from ingest.run_ingest import run_ingest
-            try:
-                run_ingest(repo_path, clean=True)
-                console.print("\n[bold green]✔ Ingestion complete![/bold green]")
-            except Exception as e:
-                console.print(f"\n[bold red]✖ Ingestion failed:[/bold red] {e}")
-                continue
+            if get_embedding_model():
+                console.print("\nStarting repository ingestion...")
+                try:
+                    run_ingest(repo_path, clean=True)
+                    console.print("\nIngestion complete!")
+                except Exception as e:
+                    console.print(f"\nIngestion failed: {e}")
+                    console.print("Returning to repository selection...\n")
+                    continue
+            else:
+                console.print("\nNo embedding model found. Downloading Embedding Model...")
+                try:
+                    download_to_program_files()
+                    console.print("\nDownload complete!")
+                    try:
+                        run_ingest(repo_path, clean=True)
+                        console.print("\nIngestion complete!")
+                    except Exception as e:
+                        console.print(f"\nIngestion failed: {e}")
+                        console.print("Returning to repository selection...\n")
+                        continue
+                except Exception as e:
+                    console.print(f"\nFailed to download embedding model: {e}")
+                    continue
         else:
-            console.print("\n[dim]Skipping ingestion. Using existing indexes.[/dim]")
+            console.print("\n[green]Skipping ingestion...[/green]")
             
         while True:
             menu = Table(show_header=False, box=None)
@@ -112,6 +132,13 @@ def main():
                     console.print(f"[bold red]✖ Error running CLI:[/bold red] {e}")
             elif choice == "2":
                 console.print("\n[cyan]Changing repository...[/cyan]")
+                # Drop reference to vector db and retriever to free up memory before re-ingestion
+                from torch.cuda import is_available,empty_cache
+                if is_available():
+                    empty_cache()
+                import gc
+                gc.collect()
+                time.sleep(3)
                 break 
             elif choice == "3":
                 console.print("[red]Exiting Code-Sentinel.[/red]")

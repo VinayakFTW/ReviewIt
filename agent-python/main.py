@@ -4,6 +4,8 @@ main.py — Code-Sentinel entry point.
 
 import os
 import sys
+import time
+import gc
 
 from core.model_manager import check_ollama_running, warmup_model, ORCHESTRATOR_MODEL
 from ingest.dep_graph import DependencyGraph
@@ -117,10 +119,36 @@ def main():
         elif choice == "4":
             src = Prompt.ask(f"Source dir (default {SOURCE_DIR}):", default=SOURCE_DIR)
             from ingest.run_ingest import run_ingest
+            print("Dropping old references...")
+            if retriever and hasattr(retriever, 'si'):
+                try:
+                    retriever.si.close()
+                except Exception:
+                    pass
+                try:
+                    if hasattr(retriever, 'vector_store'):
+                        if hasattr(retriever.vector_store, '_client'):
+                            del retriever.vector_store._client
+                        del retriever.vector_store
+                except:
+                    pass
+                retriever.vs.delete_collection()
+                retriever = None
+                qa_pipeline.retriever = None
+                review_pipeline.retriever = None
+                review_pipeline.symbol_index = None
+                docs_pipeline.retriever = None
+                from torch.cuda import is_available,empty_cache
+                if is_available():
+                    empty_cache()
+                gc.collect()
+                time.sleep(3)
+            print("Re-indexing...")
             run_ingest(src, clean=True)
             retriever = load_shared_resources()
             qa_pipeline.retriever = retriever
             review_pipeline.retriever = retriever
+            review_pipeline.symbol_index = retriever.si
             docs_pipeline.retriever = retriever
         else:
             console.print("[red]Invalid choice.[/red]")
