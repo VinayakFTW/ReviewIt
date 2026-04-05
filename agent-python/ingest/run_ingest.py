@@ -48,8 +48,16 @@ def run_ingest(source_dir: str, clean: bool = True,output_callback=None,verbose=
                 os.remove(path)
                 output_callback(f"Removed old index: {path}")
         if os.path.exists(VECTOR_DIR):
-            shutil.rmtree(VECTOR_DIR)
-            output_callback(f"Removed old vector store: {VECTOR_DIR}")
+            try:
+                shutil.rmtree(VECTOR_DIR)
+                output_callback(f"Removed old vector store: {VECTOR_DIR}")
+            except OSError:
+                from ingest.embedder import load_vector_store
+                try:
+                    db = load_vector_store(VECTOR_DIR)
+                    db.delete_collection()
+                except Exception as e:
+                    output_callback(f"Error occurred while deleting vector collection: {e}")
 
     # Step 1 — AST parse
     output_callback("\n[1/4] Parsing source files with AST...")
